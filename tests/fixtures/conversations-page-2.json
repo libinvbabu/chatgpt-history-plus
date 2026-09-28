@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "id": "6f1a9c2e-0004-4a7b-9c1d-000000000004",
+      "title": "Advice for career",
+      "create_time": "2025-12-14T10:00:00+05:30",
+      "update_time": "2026-08-19T09:14:00Z"
+    },
+    {
+      "id": "6f1a9c2e-0005-4a7b-9c1d-000000000005",
+      "title": "Apple developer enrolment",
+      "create_time": 1788000000,
+      "update_time": 1788000000
+    }
+  ],
+  "total": 5,
+  "limit": 3,
+  "offset": 3,
+  "has_missing_conversations": false
+}

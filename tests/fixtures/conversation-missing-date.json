@@ -1,0 +1,8 @@
+{
+  "items": [
+    { "id": "6f1a9c2e-0006-4a7b-9c1d-000000000006", "title": "No dates at all" },
+    { "id": "6f1a9c2e-0007-4a7b-9c1d-000000000007", "title": "Weird dates", "create_time": { "seconds": 1 }, "update_time": "not a date" },
+    { "id": "6f1a9c2e-0008-4a7b-9c1d-000000000008", "title": "Only created", "create_time": 1788000000, "update_time": null }
+  ],
+  "total": 3
+}

@@ -1,0 +1,7 @@
+{
+  "user": { "id": "user-FAKE000000000000000000", "name": "Test User", "email": "test@example.com" },
+  "expires": "2026-12-01T00:00:00.000Z",
+  "account": { "id": "00000000-0000-4000-8000-000000000000", "planType": "plus", "structure": "personal" },
+  "accessToken": "fake.jwt.token",
+  "authProvider": "auth0"
+}

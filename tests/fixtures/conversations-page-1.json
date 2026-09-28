@@ -1,0 +1,41 @@
+{
+  "items": [
+    {
+      "id": "6f1a9c2e-0001-4a7b-9c1d-000000000001",
+      "title": "Investigate sync failure",
+      "create_time": "2026-09-28T04:55:12.123456Z",
+      "update_time": "2026-09-28T04:59:40.000000Z",
+      "mapping": null,
+      "current_node": null,
+      "conversation_template_id": null,
+      "gizmo_id": null,
+      "is_archived": false,
+      "is_starred": null,
+      "workspace_id": null,
+      "async_status": null,
+      "safe_urls": [],
+      "snippet": null
+    },
+    {
+      "id": "6f1a9c2e-0002-4a7b-9c1d-000000000002",
+      "title": "Duplicate debit query",
+      "create_time": 1790494800.52,
+      "update_time": 1790494920.123,
+      "mapping": null,
+      "gizmo_id": "g-p-0123456789abcdef0123456789abcdef",
+      "is_archived": false
+    },
+    {
+      "id": "6f1a9c2e-0003-4a7b-9c1d-000000000003",
+      "title": "Mobile game ideas",
+      "create_time": "2026-09-27T06:34:00",
+      "update_time": "2026-09-27T06:34:00",
+      "gizmo_id": "g-abc123-custom-gpt",
+      "is_archived": true
+    }
+  ],
+  "total": 5,
+  "limit": 3,
+  "offset": 0,
+  "has_missing_conversations": false
+}

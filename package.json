@@ -1,0 +1,41 @@
+{
+  "name": "chatgpt-history-plus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A fast, local-first, time-first conversation history browser for ChatGPT.",
+  "homepage": "https://github.com/libinvbabu/chatgpt-history-plus",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/libinvbabu/chatgpt-history-plus.git"
+  },
+  "bugs": {
+    "url": "https://github.com/libinvbabu/chatgpt-history-plus/issues"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "npm run build && playwright test",
+    "icons": "node scripts/icons.mjs",
+    "zip": "node scripts/package.mjs",
+    "store-assets": "npm run build && STORE_ASSETS=1 playwright test store-assets"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/chrome": "^0.3.0",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}

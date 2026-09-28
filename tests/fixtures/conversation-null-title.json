@@ -1,0 +1,10 @@
+{
+  "items": [
+    { "id": "6f1a9c2e-0009-4a7b-9c1d-000000000009", "title": null, "create_time": 1788000000, "update_time": 1788000000 },
+    { "id": "6f1a9c2e-0010-4a7b-9c1d-000000000010", "title": "   ", "create_time": 1788000000, "update_time": 1788000000 },
+    { "id": "../../settings", "title": "Path traversal id", "create_time": 1788000000 },
+    { "title": "Missing id", "create_time": 1788000000 },
+    "not an object",
+    null
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT History+",
+  "short_name": "History+",
+  "version": "0.1.0",
+  "description": "Browse and search your ChatGPT history by date: timestamps, date groups and instant local search. Nothing leaves your browser.",
+  "homepage_url": "https://github.com/libinvbabu/chatgpt-history-plus",
+  "minimum_chrome_version": "111",
+  "permissions": [
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open History+ (on chatgpt.com)",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "commands": {
+    "toggle-history-plus": {
+      "description": "Open or close History+"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}
