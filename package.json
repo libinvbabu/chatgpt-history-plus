@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "A fast, local-first, time-first conversation history browser for ChatGPT.",
+  "license": "MIT",
   "homepage": "https://github.com/libinvbabu/chatgpt-history-plus",
   "repository": {
     "type": "git",

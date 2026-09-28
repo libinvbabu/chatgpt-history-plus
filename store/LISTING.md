@@ -12,7 +12,7 @@ Upload `release/chatgpt-history-plus-<version>.zip`.
 
 ## Store listing tab
 
-**Name** (from the manifest): `ChatGPT History+`
+**Name** (from the manifest): `History+ for ChatGPT`
 
 **Summary** (from the manifest, 126 of 132 characters):
 

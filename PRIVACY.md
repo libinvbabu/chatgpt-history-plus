@@ -1,4 +1,4 @@
-# Privacy policy: ChatGPT History+
+# Privacy policy: History+ for ChatGPT
 
 _Last updated: 28 September 2026_
 

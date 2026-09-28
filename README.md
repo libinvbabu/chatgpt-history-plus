@@ -2,7 +2,7 @@
   <img src="public/icons/icon-128.png" width="96" height="96" alt="">
 </p>
 
-<h1 align="center">ChatGPT History+</h1>
+<h1 align="center">History+ for ChatGPT</h1>
 
 <p align="center">
   <strong>Your ChatGPT timeline.</strong> Find any old conversation by <em>when</em> it happened.<br>
@@ -101,3 +101,7 @@ When History+ reads a date from your search, it says so (e.g. *Showing August 20
 ## Development
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the architecture, design decisions, tests (80 unit and 16 end-to-end in real Chromium), and the release process.
+
+## License
+
+[MIT](LICENSE) © Libin V Babu

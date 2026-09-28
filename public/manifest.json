@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT History+",
+  "name": "History+ for ChatGPT",
   "short_name": "History+",
   "version": "0.1.0",
   "description": "Browse and search your ChatGPT history by date: timestamps, date groups and instant local search. Nothing leaves your browser.",
