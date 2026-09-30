@@ -10,7 +10,12 @@
 </p>
 
 <p align="center">
-  <a href="#install">Install</a> ·
+  <a href="https://chromewebstore.google.com/detail/history+-for-chatgpt/aeedfmgfjdpgbnfjddpommjjagdobacj"><img src="https://img.shields.io/badge/Chrome%20Web%20Store-Add%20to%20Chrome-4285F4?logo=googlechrome&logoColor=white" alt="Add to Chrome from the Chrome Web Store"></a>
+  <a href="https://chromewebstore.google.com/detail/history+-for-chatgpt/aeedfmgfjdpgbnfjddpommjjagdobacj"><img src="https://img.shields.io/chrome-web-store/v/aeedfmgfjdpgbnfjddpommjjagdobacj?label=version" alt="Chrome Web Store version"></a>
+</p>
+
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/history+-for-chatgpt/aeedfmgfjdpgbnfjddpommjjagdobacj">Install</a> ·
   <a href="PRIVACY.md">Privacy</a> ·
   <a href="https://github.com/libinvbabu/chatgpt-history-plus/issues">Report an issue</a>
 </p>
@@ -55,9 +60,14 @@ Read the full [privacy policy](PRIVACY.md).
 
 ## Install
 
-**Chrome Web Store:** coming soon.
+**[Add History+ from the Chrome Web Store](https://chromewebstore.google.com/detail/history+-for-chatgpt/aeedfmgfjdpgbnfjddpommjjagdobacj).** It works in Chrome, Arc, Brave, Edge and other Chromium browsers, and updates itself.
 
-**From source** (Chrome, Edge, Arc, Brave, or any Chromium browser):
+Then open [chatgpt.com](https://chatgpt.com) and use any of these to open History+:
+- the **History+** item in the sidebar
+- **⇧⌘H** / **Ctrl+Shift+H**
+- the toolbar icon
+
+**From source**, to try unreleased changes or to hack on it:
 
 ```bash
 git clone https://github.com/libinvbabu/chatgpt-history-plus.git
@@ -67,12 +77,7 @@ git clone https://github.com/libinvbabu/chatgpt-history-plus.git
 cd chatgpt-history-plus && npm install && npm run build
 ```
 
-Then open `chrome://extensions` (or `arc://extensions`), enable **Developer mode**, click **Load unpacked**, and choose the `dist/` folder.
-
-Open [chatgpt.com](https://chatgpt.com) and use any of these to open History+:
-- the **History+** item in the sidebar
-- **⇧⌘H** / **Ctrl+Shift+H**
-- the toolbar icon
+Then open `chrome://extensions` (or `arc://extensions`), enable **Developer mode**, click **Load unpacked**, and choose the `dist/` folder. Remove the Web Store version first so the two don't run side by side.
 
 ## Search cheat-sheet
 
@@ -100,7 +105,7 @@ When History+ reads a date from your search, it says so (e.g. *Showing August 20
 
 ## Development
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the architecture, design decisions, tests (80 unit and 16 end-to-end in real Chromium), and the release process.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the architecture, design decisions, tests (80 unit and 17 end-to-end in real Chromium), and the release process.
 
 ## License
 

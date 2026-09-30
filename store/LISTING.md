@@ -2,6 +2,11 @@
 
 Everything the [Developer Dashboard](https://chrome.google.com/webstore/devconsole) asks for, in the order it asks. Copy each field as-is.
 
+- **Live listing:** <https://chromewebstore.google.com/detail/history+-for-chatgpt/aeedfmgfjdpgbnfjddpommjjagdobacj>
+- **Item ID:** `aeedfmgfjdpgbnfjddpommjjagdobacj`
+
+To ship an update, bump the version, run `npm run zip`, and upload the new zip under **Package** for this item. Only change the fields below if the listing itself changes.
+
 ## Package
 
 ```bash

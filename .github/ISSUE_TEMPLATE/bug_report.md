@@ -8,6 +8,8 @@ labels: bug
 
 **What did you expect?**
 
+**History+ version and source** (see `chrome://extensions`; Chrome Web Store or built from source):
+
 **Browser and version** (e.g. Chrome 153, Arc, Edge):
 
 **Diagnostics.** In History+, open Settings → **Copy diagnostics** and paste the result below. It contains counts and field names only: no conversation titles, IDs or account details.

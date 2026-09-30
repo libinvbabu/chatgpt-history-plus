@@ -106,7 +106,8 @@ npm run typecheck
 1. Bump `version` in `package.json`. It is the single source of truth, and the build writes it into the manifest.
 2. `npm run zip` builds and writes `release/chatgpt-history-plus-<version>.zip` (the files the extension needs, nothing else).
 3. `npm run store-assets` regenerates the Web Store screenshots and promo tiles in `store/` from the real extension running against the mock, using synthetic data only.
-4. Upload the zip in the Chrome Web Store dashboard. See [store/LISTING.md](../store/LISTING.md) for every field.
+4. In the Chrome Web Store dashboard, open the item (`aeedfmgfjdpgbnfjddpommjjagdobacj`), then **Package → Upload new package**, and submit for review. The version must be higher than the published one. See [store/LISTING.md](../store/LISTING.md) for every listing field.
+5. Once approved, users update automatically. The live listing is at <https://chromewebstore.google.com/detail/history+-for-chatgpt/aeedfmgfjdpgbnfjddpommjjagdobacj>.
 
 ## Not in V1 (by design)
 
