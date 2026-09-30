@@ -2,26 +2,36 @@
 // (hrefs, aria, data-* attributes) over structure, and keep fallbacks ordered
 // from most to least specific. Anything that uses these must fail silently.
 //
-// Observed layouts:
+// Observed layouts (all must keep working; the e2e mock renders each):
 //   2025      nav[aria-label="Chat history"] with data-testids and a
 //             "Search chats" menu row.
-//   Sep 2026  (signed in) aside.app-shell-left-panel > #app-shell-sidebar.
-//             A collapsed icon rail (nav[data-app-navigation-rail], inert,
-//             display:none) duplicates New chat/Search — must be ignored.
-//             nav[aria-label="Chat history"] holds: "New chat" as a text-only
-//             <button>; a menu group of button[data-sidebar-destination]
-//             (Scheduled, Library, Plugins) + Explore; then Pinned / Projects /
-//             Recents sections of a[href="/c/{id}"] rows. Some rows add a
-//             second, aria-hidden icon link to the same conversation.
-//             Search is an icon-only header button.
+//   28 Sep 26 aside.app-shell-left-panel > #app-shell-sidebar. A collapsed
+//             icon rail (nav[data-app-navigation-rail], inert, display:none)
+//             duplicates New chat/Search. nav[aria-label="Chat history"]
+//             holds a text-only "New chat" <button>, a menu group of
+//             button[data-sidebar-destination] (Scheduled, Library, Plugins),
+//             then Pinned / Projects / Recents sections of a[href="/c/{id}"]
+//             rows. Some rows add a second, aria-hidden icon link.
+//   30 Sep 26 The rail is now visible and owns the [data-sidebar-destination]
+//             buttons (Home, Space, Scheduled, Plugins). The conversation nav
+//             is nav[aria-label="Home"]: a header (toolbar + "New chat") that
+//             is sized to its own rows (anything added there is clipped), then
+//             [data-app-action-sidebar-scroll] with the sections. The Recents
+//             header has a hover-only icon button also labelled "New chat",
+//             and the logo is a[href="/"].
 
 export const SELECTORS = {
-  sidebarRoot: ['nav[aria-label="Chat history"]', '#app-shell-sidebar', 'aside[aria-label="Sidebar"]', '#stage-slideover-sidebar'],
-  sidebarNav: ['nav[aria-label="Sidebar"]', 'aside nav', 'nav'],
-  newChat: ['a[aria-label="New chat"]', 'button[aria-label="New chat"]', '[data-testid="create-new-chat-button"]', 'a[href="/"]'],
+  /** Conversation navs, most specific first. */
+  sidebarNav: ['nav[aria-label="Chat history"]', 'nav[aria-label="Home"]', 'nav'],
+  /** Wider containers, for layouts whose "New chat" sits outside the nav (signed-out pages). */
+  sidebarContainer: ['#app-shell-sidebar', 'aside[aria-label="Sidebar"]', '#stage-slideover-sidebar'],
+  newChat: ['[data-testid="create-new-chat-button"]', 'a[aria-label="New chat"]', 'button[aria-label="New chat"]'],
   menuItem: ['[data-sidebar-destination]'],
+  scrollArea: '[data-app-action-sidebar-scroll]',
   searchChats: ['[data-testid="search-conversations"]', '[data-testid*="search-chat" i]'],
   conversationLink: 'a[href*="/c/"]',
+  /** A native list of rows; the entry should join the list, not wrap around it. */
+  navList: '[data-appearance]',
 } as const
 
 /** Visible text of the old "Search chats" row, for when no test id matches. */
@@ -65,18 +75,23 @@ function hasSidebarContent(el: HTMLElement): boolean {
 
 /**
  * The visible sidebar container: the one we observe for changes, decorate
- * with dates, and place the History+ entry in.
+ * with dates, and place the History+ entry in. Prefers the conversation
+ * <nav>; never the icon rail.
  */
 export function findSidebar(doc: Document = document): HTMLElement | null {
-  for (const sel of SELECTORS.sidebarRoot) {
+  const usableNav = (el: HTMLElement) => isUsable(el) && !el.matches('[data-app-navigation-rail]')
+  for (const sel of SELECTORS.sidebarNav) {
+    for (const el of doc.querySelectorAll<HTMLElement>(sel)) {
+      if (usableNav(el) && el.querySelector(SELECTORS.conversationLink)) return el
+    }
+  }
+  for (const sel of SELECTORS.sidebarContainer) {
     for (const el of doc.querySelectorAll<HTMLElement>(sel)) {
       if (isUsable(el) && hasSidebarContent(el)) return el
     }
   }
-  for (const sel of SELECTORS.sidebarNav) {
-    for (const el of doc.querySelectorAll<HTMLElement>(sel)) {
-      if (isUsable(el) && hasSidebarContent(el)) return el.closest<HTMLElement>('aside') ?? el
-    }
+  for (const el of doc.querySelectorAll<HTMLElement>('nav')) {
+    if (usableNav(el) && hasSidebarContent(el)) return el.closest<HTMLElement>('aside') ?? el
   }
   return null
 }
@@ -85,11 +100,17 @@ function textOf(el: Element): string {
   return (el.textContent ?? '').trim()
 }
 
+/**
+ * The main "New chat" row. Matched by visible text first: in the Sep-30
+ * layout an icon-only button inside the Recents header shares its label.
+ */
 function findNewChat(root: HTMLElement): HTMLElement | null {
-  const bySelector = queryUsable(root, SELECTORS.newChat)
-  if (bySelector) return bySelector
+  const candidate = (el: HTMLElement) => !isHiddenCopy(el) && !el.closest('section')
   for (const el of root.querySelectorAll<HTMLElement>('a, button')) {
-    if (NEW_CHAT_TEXT.test(el.getAttribute('aria-label') ?? textOf(el)) && !isHiddenCopy(el)) return el
+    if (NEW_CHAT_TEXT.test(textOf(el)) && candidate(el)) return el
+  }
+  for (const sel of SELECTORS.newChat) {
+    for (const el of root.querySelectorAll<HTMLElement>(sel)) if (candidate(el)) return el
   }
   return null
 }
@@ -106,9 +127,11 @@ function findSearchChats(root: HTMLElement): HTMLElement | null {
   return null
 }
 
-/** Climb single-child wrappers so we act on the whole menu row. */
+/** Climb single-child wrappers so we act on the whole menu row, stopping at a native list. */
 function rowOf(el: HTMLElement, stop: HTMLElement): HTMLElement {
-  while (el.parentElement && el.parentElement !== stop && el.parentElement.childElementCount === 1) el = el.parentElement
+  while (el.parentElement && el.parentElement !== stop && el.parentElement.childElementCount === 1 && !el.parentElement.matches(SELECTORS.navList)) {
+    el = el.parentElement
+  }
   return el
 }
 
@@ -117,6 +140,17 @@ export interface EntrySlot {
   before: Node | null
   /** A native menu item to copy spacing from. */
   reference: HTMLElement
+  /** When the entry starts its own group, copy horizontal padding from this container. */
+  paddingFrom?: HTMLElement
+}
+
+/** The nearest ancestor (below `root`) that insets its rows horizontally. */
+function insetContainer(el: HTMLElement, root: HTMLElement): HTMLElement | undefined {
+  for (let p = el.parentElement; p && p !== root.parentElement; p = p.parentElement) {
+    const s = getComputedStyle(p)
+    if (parseFloat(s.paddingLeft) > 0 || parseFloat(s.paddingRight) > 0) return p
+  }
+  return undefined
 }
 
 /** Where the History+ entry goes, and which native item it should look like. */
@@ -134,13 +168,22 @@ export function findEntrySlot(root: HTMLElement): EntrySlot | null {
   const search = findSearchChats(root)
   if (search) return after(search)
 
-  // Sep 2026 layout: top of the menu group (Scheduled, Library, …), just under New chat.
+  // 28 Sep layout: top of the menu group (Scheduled, Library, …), just under New chat.
   const menuItem = queryUsable(root, SELECTORS.menuItem)
   if (menuItem) return before(menuItem)
 
+  const newChat = findNewChat(root)
+
+  // 30 Sep layout: no menu group, and the header around New chat clips extra
+  // rows. Start the scrolling list instead, where the menu group used to be,
+  // aligned with New chat.
+  const scroll = root.querySelector<HTMLElement>(SELECTORS.scrollArea)
+  if (scroll && newChat && isUsable(scroll)) {
+    return { parent: scroll, before: scroll.firstChild, reference: newChat, paddingFrom: insetContainer(newChat, root) }
+  }
+
   // Unknown layout: first text menu item after New chat that isn't a chat,
   // GPT/project link or section header.
-  const newChat = findNewChat(root)
   for (const el of root.querySelectorAll<HTMLElement>('a, button')) {
     if (newChat && (el === newChat || newChat.contains(el) || !(newChat.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING))) continue
     const href = el.getAttribute('href') ?? ''

@@ -23,7 +23,7 @@ a:hover>[${DATE_ATTR}="trailing"],a:focus-visible>[${DATE_ATTR}="trailing"]{disp
 `
 
 const ENTRY_CSS = `
-:host{display:block}
+:host{display:block;padding:var(--chp-inset,0)}
 button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:var(--chp-gap,8px);width:100%;min-height:var(--chp-h,36px);padding:var(--chp-pad,6px 10px);border-radius:var(--chp-radius,10px);cursor:pointer;font:inherit;font-size:var(--chp-font,14px);line-height:var(--chp-lh,20px);color:var(--chp-color,inherit)}
 button:hover,button:focus-visible{background:color-mix(in srgb,currentColor 8%,transparent)}
 button:focus-visible{outline:2px solid color-mix(in srgb,currentColor 40%,transparent);outline-offset:-2px}
@@ -108,6 +108,10 @@ function matchNativeItem(host: HTMLElement, slot: EntrySlot) {
     '--chp-color': t.color,
     '--chp-icon': svg ? px(getComputedStyle(svg).width) : undefined,
     '--chp-icon-box': iconBox ? px(getComputedStyle(iconBox).width) : undefined,
+  }
+  if (slot.paddingFrom) {
+    const p = getComputedStyle(slot.paddingFrom)
+    vars['--chp-inset'] = `0 ${p.paddingRight} 0 ${p.paddingLeft}`
   }
   for (const [k, v] of Object.entries(vars)) if (v && host.style.getPropertyValue(k) !== v) host.style.setProperty(k, v)
 }

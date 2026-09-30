@@ -105,8 +105,8 @@ export class MockChatGPT {
   /** Answer the next N list requests with 429 + this Retry-After (seconds). */
   rateLimitNext = 0
   rateLimitRetryAfter = '1'
-  /** 'current' mirrors ChatGPT's Sep 2026 signed-in sidebar; 'legacy' the 2025 one. */
-  layout: 'current' | 'legacy' = 'current'
+  /** ChatGPT sidebar generation to render (signed in). See src/chatgpt/selectors.ts. */
+  layout: 'sep30' | 'sep28' | 'legacy' = 'sep30'
   /** Neutral titles and a fake chat transcript, for store screenshots. */
   showcase = false
   constructor(total = 650) {
@@ -175,7 +175,9 @@ export class MockChatGPT {
     const recent = this.conversations.slice(0, 28).map((c) => ({ id: c.id, title: c.title ?? 'New chat' }))
     const pinned = this.conversations[28]!
     const all = Object.fromEntries(this.conversations.map((c) => [c.id, c.title ?? 'New chat']))
-    const sidebar = this.layout === 'legacy' ? this.legacySidebar() : this.currentSidebar(esc(pinned.title ?? 'New chat'), pinned.id)
+    const pinnedTitle = esc(pinned.title ?? 'New chat')
+    const sidebar =
+      this.layout === 'legacy' ? this.legacySidebar() : this.layout === 'sep28' ? this.sep28Sidebar(pinnedTitle, pinned.id) : this.sep30Sidebar(pinnedTitle, pinned.id)
     return `<!doctype html>
 <html class="light"><head><meta charset="utf-8"><title>ChatGPT</title>
 <style>
@@ -208,6 +210,16 @@ export class MockChatGPT {
   .row .rail{min-width:0} .row:hover .rail{min-width:56px}
   .row .actions{position:absolute;right:6px;top:0;height:100%;display:flex;align-items:center;opacity:0}
   .row:hover .actions{opacity:1}
+  /* sep30 layout */
+  #app-shell-sidebar.sep30{display:flex;height:100vh}
+  .rail{display:flex;flex-direction:column;gap:4px;width:52px;padding:8px 0;align-items:center;border-right:1px solid rgba(0,0,0,.08)}
+  .rail button{all:unset;display:grid;place-items:center;width:36px;height:36px;border-radius:10px}
+  .home-nav{flex:1;min-width:0;display:flex;flex-direction:column;padding:0}
+  .home-header{height:88px;overflow:hidden;padding:0 8px;flex:none}
+  .home-scroll{flex:1;overflow:auto;display:flex;flex-direction:column;gap:20px;padding-top:4px}
+  .px-row-x{padding-inline:8px}
+  .section-title{display:flex;align-items:center;justify-content:space-between}
+  .hover-tools{width:0;overflow:hidden;opacity:0;display:flex}
   main{flex:1;padding:40px;overflow:auto}
   main.chat{padding:48px 0 0}
   .thread{max-width:720px;margin:0 auto;padding:0 32px 0 440px;line-height:1.6;font-size:15px}
@@ -267,8 +279,43 @@ ${this.showcase ? '<main class="chat"><div class="thread"><div class="bubble" id
 </nav></aside>`
   }
 
-  /** Sep 2026 (signed in), reduced from the real DOM: hidden rail, text-only New chat, data-sidebar-destination menu. */
-  private currentSidebar(pinnedTitle: string, pinnedId: string) {
+  /**
+   * 30 Sep 2026 (signed in), reduced from the real DOM: a visible icon rail
+   * owns the destinations; the Home nav's header is sized to its own rows
+   * (overflow hidden), so anything appended there is invisible.
+   */
+  private sep30Sidebar(pinnedTitle: string, pinnedId: string) {
+    const icon = '<span class="icon-leading-slot"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span>'
+    const railBtn = (dest: string, label: string) => `<button type="button" data-sidebar-destination="builtin:${dest}"><svg width="20" height="20"></svg><span class="sr-only">${label}</span></button>`
+    return `<aside class="app-shell-left-panel"><div><div id="app-shell-sidebar" class="sep30">
+  <nav data-app-navigation-rail="true" aria-label="App navigation" class="rail">
+    ${railBtn('home', 'Home')}${railBtn('space', 'Space')}${railBtn('automations', 'Scheduled')}${railBtn('customize', 'Plugins')}
+  </nav>
+  <div data-slate-sidebar-content="true" style="flex:1;min-width:0;display:flex">
+    <nav role="navigation" aria-label="Home" class="home-nav">
+      <div class="home-header">
+        <div class="toolbar"><a aria-label="Home" href="/" style="color:inherit;text-decoration:none">ChatGPT</a><span><button type="button" class="icon-btn" aria-label="View activity"><svg width="20" height="20"></svg></button><button type="button" class="icon-btn" aria-label="Search"><svg width="20" height="20"></svg></button></span></div>
+        <div data-appearance="plain" class="nav-list" id="new-chat-list"><div class="min-w-0 flex-1"><button type="button" class="sidebar-item" id="new-chat"><div class="line">${icon}<span class="text-fade-truncate">New chat</span></div></button></div></div>
+      </div>
+      <div data-app-action-sidebar-scroll="" class="home-scroll" id="home-scroll">
+        <div class="contents"><div data-sidebar-project-container-id="pinned"><section class="px-row-x" data-app-action-sidebar-section="" data-app-action-sidebar-section-heading="Pinned">
+          <h3 style="margin:8px"><button type="button" data-app-action-sidebar-section-toggle="" style="all:unset">Pinned</button></h3>
+          <div role="list"><div role="listitem"><div class="row" role="group"><div class="tt" data-thread-title-trigger="true"><a class="title-link" href="/c/${pinnedId}"><span data-thread-title="true">${pinnedTitle}</span></a></div><div class="rail"></div></div></div></div>
+        </section></div></div>
+        <div><section class="px-row-x" data-app-action-sidebar-section="" data-app-action-sidebar-section-heading="Recents">
+          <div class="section-title"><h3 style="margin:8px"><button type="button" data-app-action-sidebar-section-toggle="" style="all:unset">Recents</button></h3>
+            <div class="hover-tools"><button type="button" aria-label="Chat sidebar options">…</button><button type="button" aria-label="New chat"><svg width="16" height="16"></svg></button></div></div>
+          <div role="list" id="history"></div>
+        </section></div>
+      </div>
+    </nav>
+    <nav aria-label="Space navigation" style="display:none !important"><button type="button" class="sidebar-item"><div class="line">${icon}<span class="text-fade-truncate">New page</span></div></button></nav>
+  </div>
+</div></div></aside>`
+  }
+
+  /** 28 Sep 2026 (signed in), reduced from the real DOM: hidden rail, text-only New chat, data-sidebar-destination menu. */
+  private sep28Sidebar(pinnedTitle: string, pinnedId: string) {
     const icon = '<span class="icon-leading-slot"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span>'
     const item = (label: string, attrs: string) => `<button type="button" class="sidebar-item" ${attrs}><div class="line">${icon}<span class="text-fade-truncate">${label}</span></div></button>`
     return `<aside class="app-shell-left-panel"><div><div id="app-shell-sidebar">

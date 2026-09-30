@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "History+ for ChatGPT",
   "short_name": "History+",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Browse and search your ChatGPT history by date: timestamps, date groups and instant local search. Nothing leaves your browser.",
   "homepage_url": "https://github.com/libinvbabu/chatgpt-history-plus",
   "minimum_chrome_version": "111",

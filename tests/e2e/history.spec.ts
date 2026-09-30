@@ -28,7 +28,37 @@ test.describe('History+', () => {
     expect(errors).toEqual([])
   })
 
-  test('current sidebar: entry sits at the top of the menu group and matches native rows', async ({ page }) => {
+  test('30 Sep sidebar: entry starts the scroll list, is actually visible, and lines up with New chat', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    const entry = page.locator('[data-chp-entry]')
+    await expect(entry).toBeVisible()
+    const r = await page.evaluate(() => {
+      const e = document.querySelector<HTMLElement>('[data-chp-entry]')!
+      const box = e.getBoundingClientRect()
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+      const nc = document.getElementById('new-chat')!
+      return {
+        parentId: e.parentElement?.id,
+        first: e.parentElement?.firstElementChild === e,
+        inHeader: !!e.closest('.home-header'),
+        inRail: !!e.closest('[data-app-navigation-rail]'),
+        inSection: !!e.closest('section'),
+        hitIsEntry: hit === e,
+        height: Math.round(box.height),
+        refHeight: Math.round(nc.getBoundingClientRect().height),
+        labelLeft: Math.round(e.shadowRoot!.querySelector('.label')!.getBoundingClientRect().left),
+        refLabelLeft: Math.round(nc.querySelector('.text-fade-truncate')!.getBoundingClientRect().left),
+      }
+    })
+    expect(r).toMatchObject({ parentId: 'home-scroll', first: true, inHeader: false, inRail: false, inSection: false, hitIsEntry: true })
+    expect(Math.abs(r.height - r.refHeight)).toBeLessThanOrEqual(1)
+    expect(Math.abs(r.labelLeft - r.refLabelLeft)).toBeLessThanOrEqual(1)
+    await entry.getByRole('button').click()
+    await expect(panel(page)).toBeVisible()
+  })
+
+  test('28 Sep sidebar: entry sits at the top of the menu group and matches native rows', async ({ page, server }) => {
+    server.layout = 'sep28'
     await page.goto('https://chatgpt.com/')
     const entry = page.locator('[data-chp-entry]')
     await expect(entry).toBeVisible()
