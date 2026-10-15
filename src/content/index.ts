@@ -6,6 +6,7 @@
 // A failure in A must never affect B, and neither may break ChatGPT.
 
 import { createChatGPTProvider } from '../chatgpt/adapter'
+import { isRailDestination, railInset } from '../chatgpt/selectors'
 import { isToggleMessage } from '../shared/messages'
 import { extensionAlive } from '../shared/platform'
 import { chromeStore } from '../storage'
@@ -49,6 +50,35 @@ async function main() {
     }),
   )
 
+  // Open beside ChatGPT's icon rail rather than over it. Re-measured when the
+  // window resizes, the sidebar is re-found, and each time the panel opens.
+  const syncInset = () => {
+    try {
+      panel?.setLeftInset(railInset())
+    } catch {
+      // Cosmetic only; the panel just opens at the edge.
+    }
+  }
+  syncInset()
+  window.addEventListener('resize', syncInset)
+  cleanups.push(() => window.removeEventListener('resize', syncInset))
+  let wasOpen = false
+  cleanups.push(
+    app.store.subscribe(() => {
+      const open = app.state.open
+      if (open && !wasOpen) syncInset()
+      wasOpen = open
+    }),
+  )
+
+  // Going to another rail destination (Home, Space, Scheduled, …) leaves History+
+  // behind: slide it back. Capture phase, so ChatGPT stopping the event can't hide it from us.
+  const onRailNavigate = (e: MouseEvent) => {
+    if (app.state.open && isRailDestination(e.target)) app.close()
+  }
+  document.addEventListener('click', onRailNavigate, true)
+  cleanups.push(() => document.removeEventListener('click', onRailNavigate, true))
+
   // Cmd/Ctrl+Shift+H while on chatgpt.com.
   const onKey = (e: KeyboardEvent) => {
     if (e.shiftKey && !e.altKey && (e.metaKey || e.ctrlKey) && (e.code === 'KeyH' || e.key.toLowerCase() === 'h')) {
@@ -86,22 +116,34 @@ async function main() {
   let watcher: SidebarWatcher | null = null
   try {
     const sidebar = new NativeSidebar({ onOpen: () => void app.open() })
-    watcher = watchSidebar((navEl) => {
+    watcher = watchSidebar(({ nav, rail }) => {
       panel?.ensureAttached()
+      syncInset()
       const s = app.state
-      sidebar.update(navEl, s.index, s.settings.timestampMode, s.settings.showNativeDates)
+      sidebar.update({
+        nav,
+        rail,
+        index: s.index,
+        mode: s.settings.timestampMode,
+        showDates: s.settings.showNativeDates,
+        // The launcher is a fallback for a working History+; signed out it would only lead to "needs a session".
+        allowLauncher: s.account === 'ready',
+        theme: s.theme,
+      })
     })
     let lastRev = -1
     let lastSettings = app.state.settings
     let lastTheme = app.state.theme
+    let lastAccount = app.state.account
     cleanups.push(
       app.store.subscribe(() => {
         const s = app.state
         // Theme too: the entry copies ChatGPT's text colour, which changes with it.
-        if (s.indexRev !== lastRev || s.settings !== lastSettings || s.theme !== lastTheme) {
+        if (s.indexRev !== lastRev || s.settings !== lastSettings || s.theme !== lastTheme || s.account !== lastAccount) {
           lastRev = s.indexRev
           lastSettings = s.settings
           lastTheme = s.theme
+          lastAccount = s.account
           watcher?.refresh()
         }
       }),

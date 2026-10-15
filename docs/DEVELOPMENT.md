@@ -18,7 +18,8 @@ Load `dist/` at `chrome://extensions` → Developer mode → **Load unpacked**. 
 
 The spec's key decision holds: there are **two products**, and B never depends on A.
 
-- **A. Native enhancer** (best-effort): the sidebar entry and dates beside native items. It only *adds* its own `data-chp-*` nodes and never moves or removes React-owned ones. It fails silently when ChatGPT's DOM changes.
+- **A. Native enhancer** (best-effort): the sidebar entry, an icon in the always-visible icon rail (so a collapsed sidebar still has a way in), dates beside native items, and a floating edge-tab launcher. It only *adds* its own `data-chp-*` nodes and never moves or removes React-owned ones. It fails silently when ChatGPT's DOM changes.
+  - **The launcher is a safety net, not a feature.** Each entry is watched with an `IntersectionObserver`, because an entry can sit in the DOM yet be clipped to nothing (the v0.1.0 bug). If neither is actually on screen for 3 s, the edge tab appears. It disappears the moment one is. It never appears signed out.
 - **B. History engine**: sync, cache, search, grouping, and the panel. It lives in its own shadow root and needs no ChatGPT DOM.
 
 ```

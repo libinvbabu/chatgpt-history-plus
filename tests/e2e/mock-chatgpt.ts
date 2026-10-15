@@ -106,7 +106,8 @@ export class MockChatGPT {
   rateLimitNext = 0
   rateLimitRetryAfter = '1'
   /** ChatGPT sidebar generation to render (signed in). See src/chatgpt/selectors.ts. */
-  layout: 'sep30' | 'sep28' | 'legacy' = 'sep30'
+  /** `sep30-collapsed`: conversation panel collapsed to nothing, rail only. `bare`: no sidebar at all. */
+  layout: 'sep30' | 'sep30-collapsed' | 'sep28' | 'legacy' | 'bare' = 'sep30'
   /** Neutral titles and a fake chat transcript, for store screenshots. */
   showcase = false
   constructor(total = 650) {
@@ -177,7 +178,13 @@ export class MockChatGPT {
     const all = Object.fromEntries(this.conversations.map((c) => [c.id, c.title ?? 'New chat']))
     const pinnedTitle = esc(pinned.title ?? 'New chat')
     const sidebar =
-      this.layout === 'legacy' ? this.legacySidebar() : this.layout === 'sep28' ? this.sep28Sidebar(pinnedTitle, pinned.id) : this.sep30Sidebar(pinnedTitle, pinned.id)
+      this.layout === 'legacy'
+        ? this.legacySidebar()
+        : this.layout === 'sep28'
+          ? this.sep28Sidebar(pinnedTitle, pinned.id)
+          : this.layout === 'bare'
+            ? ''
+            : this.sep30Sidebar(pinnedTitle, pinned.id, this.layout === 'sep30-collapsed')
     return `<!doctype html>
 <html class="light"><head><meta charset="utf-8"><title>ChatGPT</title>
 <style>
@@ -213,7 +220,10 @@ export class MockChatGPT {
   /* sep30 layout */
   #app-shell-sidebar.sep30{display:flex;height:100vh}
   .rail{display:flex;flex-direction:column;gap:4px;width:52px;padding:8px 0;align-items:center;border-right:1px solid rgba(0,0,0,.08)}
-  .rail button{all:unset;display:grid;place-items:center;width:36px;height:36px;border-radius:10px}
+  .rail button{all:unset;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;color:#767676}
+  .rail-list{display:flex;flex-direction:column;gap:4px;align-items:stretch;width:100%;box-sizing:border-box;padding:0 8px}
+  .rail-list.nested{padding:0}
+  .rail-divider{width:24px;border-top:1px solid #ddd;align-self:center;margin:4px 0}
   .home-nav{flex:1;min-width:0;display:flex;flex-direction:column;padding:0}
   .home-header{height:88px;overflow:hidden;padding:0 8px;flex:none}
   .home-scroll{flex:1;overflow:auto;display:flex;flex-direction:column;gap:20px;padding-top:4px}
@@ -284,14 +294,23 @@ ${this.showcase ? '<main class="chat"><div class="thread"><div class="bubble" id
    * owns the destinations; the Home nav's header is sized to its own rows
    * (overflow hidden), so anything appended there is invisible.
    */
-  private sep30Sidebar(pinnedTitle: string, pinnedId: string) {
+  private sep30Sidebar(pinnedTitle: string, pinnedId: string, collapsed = false) {
     const icon = '<span class="icon-leading-slot"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span>'
-    const railBtn = (dest: string, label: string) => `<button type="button" data-sidebar-destination="builtin:${dest}"><svg width="20" height="20"></svg><span class="sr-only">${label}</span></button>`
-    return `<aside class="app-shell-left-panel"><div><div id="app-shell-sidebar" class="sep30">
+    const railBtn = (dest: string, label: string, attrs = '') => `<button type="button" data-sidebar-destination="builtin:${dest}" ${attrs}><svg width="20" height="20"></svg><span class="sr-only">${label}</span></button>`
+    // Rail markup follows the real DOM (16 Oct 2026): destination buttons in a
+    // [data-appearance] group, an Explore popover button, a divider, Sites alone
+    // in a nested group, then the profile button.
+    return `<aside class="app-shell-left-panel"${collapsed ? ' style="width:52px"' : ''}><div><div id="app-shell-sidebar" class="sep30">
   <nav data-app-navigation-rail="true" aria-label="App navigation" class="rail">
-    ${railBtn('home', 'Home')}${railBtn('space', 'Space')}${railBtn('automations', 'Scheduled')}${railBtn('customize', 'Plugins')}
+    <div data-appearance="plain" class="rail-list">
+      <div>${railBtn('home', 'Home', 'data-selected="" aria-current="page"')}</div>${railBtn('space', 'Space')}${railBtn('automations', 'Scheduled')}${railBtn('customize', 'Plugins')}
+      <button type="button" aria-haspopup="dialog"><svg width="20" height="20"></svg><span class="sr-only">Explore</span></button>
+      <div class="rail-divider"></div>
+      <div data-appearance="plain" class="rail-list nested">${railBtn('sites', 'Sites')}</div>
+    </div>
+    <div><button type="button" aria-label="Open profile menu"><svg width="24" height="24"></svg></button></div>
   </nav>
-  <div data-slate-sidebar-content="true" style="flex:1;min-width:0;display:flex">
+  <div data-slate-sidebar-content="true" style="${collapsed ? 'flex:none;width:0;overflow:hidden' : 'flex:1;min-width:0'};display:flex">
     <nav role="navigation" aria-label="Home" class="home-nav">
       <div class="home-header">
         <div class="toolbar"><a aria-label="Home" href="/" style="color:inherit;text-decoration:none">ChatGPT</a><span><button type="button" class="icon-btn" aria-label="View activity"><svg width="20" height="20"></svg></button><button type="button" class="icon-btn" aria-label="Search"><svg width="20" height="20"></svg></button></span></div>

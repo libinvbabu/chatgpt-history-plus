@@ -57,6 +57,153 @@ test.describe('History+', () => {
     await expect(panel(page)).toBeVisible()
   })
 
+  test('rail: a History+ icon follows the last rail button, looks native and opens the panel', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    const icon = page.locator('[data-chp-rail-entry]')
+    await expect(icon).toBeVisible()
+    const r = await page.evaluate(() => {
+      const e = document.querySelector<HTMLElement>('[data-chp-rail-entry]')!
+      const box = e.getBoundingClientRect()
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+      const ref = document.querySelector<HTMLElement>('[data-sidebar-destination="builtin:sites"]')!
+      const refBox = ref.getBoundingClientRect()
+      return {
+        inRail: !!e.closest('[data-app-navigation-rail]'),
+        prev: e.previousElementSibling?.getAttribute('data-sidebar-destination'),
+        hitIsEntry: hit === e,
+        dw: Math.abs(box.width - refBox.width),
+        dh: Math.abs(box.height - refBox.height),
+        dx: Math.abs(box.left - refBox.left),
+        color: getComputedStyle(e.shadowRoot!.querySelector('button')!).color,
+        refColor: getComputedStyle(ref).color,
+      }
+    })
+    expect(r).toMatchObject({ inRail: true, prev: 'builtin:sites', hitIsEntry: true })
+    expect(Math.max(r.dw, r.dh, r.dx)).toBeLessThanOrEqual(1)
+    expect(r.color).toBe(r.refColor)
+    // The labelled row stays too, and neither needs the floating launcher.
+    await expect(page.locator('[data-chp-entry]')).toBeVisible()
+    await expect(icon.getByRole('button')).toHaveAccessibleName(/History\+/)
+    // In the extension's brand colour, not the rail's grey.
+    await expect(icon.locator('svg rect')).toHaveAttribute('fill', 'url(#chp-tile)')
+    await icon.getByRole('button').click()
+    await expect(panel(page)).toBeVisible()
+  })
+
+  test('panel opens beside the icon rail, leaving the rail visible and clickable', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    const panelLeft = () =>
+      page.evaluate(() => Math.round(document.getElementById('chatgpt-history-plus-root')!.shadowRoot!.querySelector('.panel')!.getBoundingClientRect().left))
+    const railRight = await page.evaluate(() => Math.round(document.querySelector('[data-app-navigation-rail]')!.getBoundingClientRect().right))
+    expect(railRight).toBeGreaterThan(0)
+    await expect.poll(panelLeft).toBe(railRight) // after the slide-in animation
+    // Every rail button, ours included, is still what the pointer hits.
+    const hits = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('[data-app-navigation-rail] button, [data-chp-rail-entry]')].map((el) => {
+        const b = el.getBoundingClientRect()
+        const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)
+        return el === hit || el.contains(hit)
+      }),
+    )
+    expect(hits.length).toBeGreaterThan(4)
+    expect(hits.every(Boolean)).toBe(true)
+    // The panel's own width is unchanged.
+    const width = await page.evaluate(() => document.getElementById('chatgpt-history-plus-root')!.shadowRoot!.querySelector('.panel')!.getBoundingClientRect().width)
+    expect(Math.round(width)).toBe(400)
+  })
+
+  test('going to another rail destination slides the panel back; other rail buttons leave it open', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    // The profile button opens a menu rather than going anywhere.
+    await page.getByRole('button', { name: 'Open profile menu' }).click()
+    await expect(panel(page)).toBeVisible()
+
+    const slidingBack = await page.evaluate(async () => {
+      const shadow = document.getElementById('chatgpt-history-plus-root')!.shadowRoot!
+      document.querySelector<HTMLElement>('[data-sidebar-destination="builtin:sites"]')!.click()
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+      return shadow.querySelector('.panel')?.hasAttribute('data-closing') ?? false
+    })
+    expect(slidingBack).toBe(true) // still on screen for the exit animation...
+    await expect(panel(page)).toHaveCount(0) // ...then gone
+    await expect(page.locator('[data-chp-rail-entry]')).toBeVisible()
+
+    // History+ is still one click away.
+    await page.locator('[data-chp-rail-entry]').getByRole('button').click()
+    await expect(panel(page)).toBeVisible()
+  })
+
+  test('panel opens at the window edge when there is no rail', async ({ page, server }) => {
+    server.layout = 'sep28'
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    await expect
+      .poll(() => page.evaluate(() => Math.round(document.getElementById('chatgpt-history-plus-root')!.shadowRoot!.querySelector('.panel')!.getBoundingClientRect().left)))
+      .toBe(0)
+  })
+
+  test('collapsed sidebar: the rail icon is still reachable and no launcher is needed', async ({ page, server }) => {
+    server.layout = 'sep30-collapsed'
+    await page.goto('https://chatgpt.com/')
+    const icon = page.locator('[data-chp-rail-entry]')
+    await expect(icon).toBeVisible()
+    await page.waitForTimeout(4500) // past the launcher's grace period
+    await expect(page.locator('[data-chp-launcher]')).toHaveCount(0)
+    await icon.getByRole('button').click()
+    await expect(panel(page)).toBeVisible()
+  })
+
+  test('floating launcher: appears only while no entry is visible, opens the panel, then steps aside', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    await expect(page.locator('[data-chp-rail-entry]')).toBeVisible()
+    const launcher = page.locator('[data-chp-launcher]')
+    await expect(launcher).toHaveCount(0)
+
+    // A redesign hides every native entry (a sidebar that is there but not shown).
+    const hide = await page.addStyleTag({ content: '#app-shell-sidebar{display:none !important}' })
+    await expect(launcher).toBeVisible({ timeout: 15_000 })
+    const box = await launcher.boundingBox()
+    expect(box!.x + box!.width).toBeGreaterThan(1280 - 2) // hugs the right edge
+    await launcher.getByRole('button').click()
+    await expect(panel(page)).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(panel(page)).toBeHidden()
+
+    // A native entry is visible again: the launcher goes away at once.
+    await hide.evaluate((el) => (el as Element).remove())
+    await expect(launcher).toHaveCount(0, { timeout: 5_000 })
+  })
+
+  test('floating launcher: an entry that exists but is clipped away does not count as visible', async ({ page, server }) => {
+    server.layout = 'sep30-collapsed'
+    await page.goto('https://chatgpt.com/')
+    await expect(page.locator('[data-chp-rail-entry]')).toBeVisible()
+    // The row is placed inside the collapsed (zero-width, overflow-hidden) panel: it has a box, but nothing of it is on screen.
+    await expect(page.locator('[data-chp-entry]')).toHaveCount(1)
+    expect(
+      await page.evaluate(
+        () =>
+          new Promise<number>((resolve) => {
+            const io = new IntersectionObserver((rs) => (resolve(rs[0]!.intersectionRect.width), io.disconnect()))
+            io.observe(document.querySelector('[data-chp-entry]')!)
+          }),
+      ),
+    ).toBeLessThan(1)
+    // With the rail gone too, only that clipped row is left, so the launcher steps in.
+    await page.addStyleTag({ content: 'nav[data-app-navigation-rail]{display:none !important}' })
+    await expect(page.locator('[data-chp-launcher]')).toBeVisible({ timeout: 15_000 })
+  })
+
+  test('floating launcher: never shown on a signed-out page', async ({ page, server }) => {
+    server.loggedOut = true
+    server.layout = 'bare'
+    await page.goto('https://chatgpt.com/')
+    await page.waitForTimeout(6000)
+    await expect(page.locator('[data-chp-launcher], [data-chp-entry], [data-chp-rail-entry]')).toHaveCount(0)
+  })
+
   test('28 Sep sidebar: entry sits at the top of the menu group and matches native rows', async ({ page, server }) => {
     server.layout = 'sep28'
     await page.goto('https://chatgpt.com/')

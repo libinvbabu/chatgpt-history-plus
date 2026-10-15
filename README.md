@@ -63,7 +63,7 @@ Read the full [privacy policy](PRIVACY.md).
 **[Add History+ from the Chrome Web Store](https://chromewebstore.google.com/detail/history+-for-chatgpt/aeedfmgfjdpgbnfjddpommjjagdobacj).** It works in Chrome, Arc, Brave, Edge and other Chromium browsers, and updates itself.
 
 Then open [chatgpt.com](https://chatgpt.com) and use any of these to open History+:
-- the **History+** item in the sidebar
+- the **History+** item in the sidebar, or the clock icon in the narrow icon column, which stays put when the sidebar is collapsed
 - **⇧⌘H** / **Ctrl+Shift+H**
 - the toolbar icon
 
@@ -99,7 +99,7 @@ When History+ reads a date from your search, it says so (e.g. *Showing August 20
 
 **Why is the first sync slow?** ChatGPT limits how fast its conversation list can be read, and its own sidebar shares that allowance. History+ paces itself, waits when asked, and resumes by itself. You can browse while it catches up.
 
-**The History+ item disappeared from ChatGPT's sidebar.** ChatGPT probably changed its layout. `⇧⌘H` and the toolbar icon still work. Please [open an issue](https://github.com/libinvbabu/chatgpt-history-plus/issues) and include Settings → **Copy diagnostics**, which contains no titles or ids.
+**The History+ item disappeared from ChatGPT's sidebar.** ChatGPT probably changed its layout. If History+ can't find a visible spot of its own, it shows a small tab on the right edge of the page instead, and `⇧⌘H` and the toolbar icon always work. Please [open an issue](https://github.com/libinvbabu/chatgpt-history-plus/issues) and include Settings → **Copy diagnostics**, which contains no titles or ids.
 
 **Is this made by OpenAI?** No. History+ is an independent open-source project, not affiliated with or endorsed by OpenAI. ChatGPT is a trademark of OpenAI.
 

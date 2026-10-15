@@ -18,12 +18,28 @@ const locale = typeof navigator !== 'undefined' ? navigator.language : undefined
 const weekStartsOn = getWeekStartsOn(locale)
 const rowId = (i: number) => `chp-row-${i}`
 
+/** Matches the `slide-out` animation in styles.css. */
+const EXIT_MS = 170
+
+/** Keeps the panel mounted for `EXIT_MS` after it closes, so it can slide back instead of vanishing. */
+function usePresence(open: boolean): { mounted: boolean; closing: boolean } {
+  const [lingering, setLingering] = useState(open)
+  if (open && !lingering) setLingering(true)
+  useEffect(() => {
+    if (open) return
+    const t = setTimeout(() => setLingering(false), EXIT_MS)
+    return () => clearTimeout(t)
+  }, [open])
+  return { mounted: open || lingering, closing: !open }
+}
+
 export function Root({ app }: { app: HistoryApp }) {
   const state = useSyncExternalStore(app.store.subscribe, app.store.get)
-  if (!state.open) return null
+  const { mounted, closing } = usePresence(state.open)
+  if (!mounted) return null
   return (
     <ErrorBoundary onClose={() => app.close()}>
-      <HistoryPanel app={app} state={state} />
+      <HistoryPanel app={app} state={state} closing={closing} />
     </ErrorBoundary>
   )
 }
@@ -37,7 +53,7 @@ function useNow(ms: number): Date {
   return now
 }
 
-function HistoryPanel({ app, state }: { app: HistoryApp; state: AppState }) {
+function HistoryPanel({ app, state, closing }: { app: HistoryApp; state: AppState; closing: boolean }) {
   const now = useNow(60_000)
   const ctx = useDateContext(now, weekStartsOn, locale)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -160,7 +176,7 @@ function HistoryPanel({ app, state }: { app: HistoryApp; state: AppState }) {
   const count = view.total
 
   return (
-    <div className="panel" ref={panelRef} role="dialog" aria-label="History+" onKeyDown={onPanelKey}>
+    <div className="panel" ref={panelRef} role="dialog" aria-label="History+" onKeyDown={onPanelKey} data-closing={closing || undefined} inert={closing || undefined}>
       {state.view === 'settings' ? (
         <>
           <div className="header">

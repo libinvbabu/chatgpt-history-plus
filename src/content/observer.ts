@@ -1,9 +1,16 @@
 // Watches ChatGPT's sidebar without observing the whole document.
 //
-// A cheap poll re-discovers the sidebar when React replaces it; a
-// MutationObserver scoped to the sidebar reports changes, debounced.
+// A cheap poll re-discovers the sidebar and the icon rail when React replaces
+// them; a MutationObserver scoped to them reports changes, debounced.
 
-import { findSidebar } from '../chatgpt/selectors'
+import { findRail, findSidebar } from '../chatgpt/selectors'
+
+export interface SidebarTargets {
+  /** The conversation panel; null when collapsed away or not found. */
+  nav: HTMLElement | null
+  /** The always-visible icon rail, in layouts that have one. */
+  rail: HTMLElement | null
+}
 
 export interface SidebarWatcher {
   stop(): void
@@ -11,17 +18,18 @@ export interface SidebarWatcher {
   refresh(): void
 }
 
-export function watchSidebar(onChange: (nav: HTMLElement | null) => void, opts: { pollMs?: number; debounceMs?: number } = {}): SidebarWatcher {
+export function watchSidebar(onChange: (targets: SidebarTargets) => void, opts: { pollMs?: number; debounceMs?: number } = {}): SidebarWatcher {
   const pollMs = opts.pollMs ?? 1500
   const debounceMs = opts.debounceMs ?? 75
   let nav: HTMLElement | null = null
+  let rail: HTMLElement | null = null
   let observer: MutationObserver | null = null
   let timer: ReturnType<typeof setTimeout> | undefined
 
   const fire = () => {
     timer = undefined
     try {
-      onChange(nav)
+      onChange({ nav, rail })
     } catch {
       // Sidebar augmentation is best-effort; never let it throw into the page.
     }
@@ -31,15 +39,21 @@ export function watchSidebar(onChange: (nav: HTMLElement | null) => void, opts: 
   }
 
   const discover = () => {
-    if (nav?.isConnected) return
-    observer?.disconnect()
-    observer = null
-    nav = findSidebar()
-    if (nav) {
-      observer = new MutationObserver(schedule)
-      observer.observe(nav, { childList: true, subtree: true })
+    const nextNav = nav?.isConnected ? nav : findSidebar()
+    const nextRail = findRail()
+    const changed = nextNav !== nav || nextRail !== rail
+    nav = nextNav
+    rail = nextRail
+    if (changed) {
+      observer?.disconnect()
+      observer = null
+      if (nav || rail) {
+        observer = new MutationObserver(schedule)
+        for (const el of [nav, rail]) if (el) observer.observe(el, { childList: true, subtree: true })
+      }
     }
-    schedule()
+    // With nothing to watch, keep reporting so the callback can notice and retry.
+    if (changed || (!nav && !rail)) schedule()
   }
 
   discover()

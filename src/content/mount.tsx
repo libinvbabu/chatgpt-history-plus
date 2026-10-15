@@ -10,6 +10,8 @@ export interface MountedPanel {
   /** Re-attach if ChatGPT's renderer removed our host from <body>. */
   ensureAttached(): void
   hasFocus(): boolean
+  /** Leave this many px free on the left edge (ChatGPT's icon rail) when opening. */
+  setLeftInset(px: number): void
   destroy(): void
 }
 
@@ -39,6 +41,10 @@ export function mountPanel(app: HistoryApp): MountedPanel {
       if (!host.isConnected) document.body.append(host)
     },
     hasFocus: () => shadow.activeElement != null,
+    setLeftInset(px) {
+      const v = `${px}px`
+      if (host.style.getPropertyValue('--chp-left') !== v) host.style.setProperty('--chp-left', v)
+    },
     destroy() {
       root.unmount()
       host.remove()

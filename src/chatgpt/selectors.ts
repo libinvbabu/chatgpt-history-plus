@@ -19,6 +19,13 @@
 //             [data-app-action-sidebar-scroll] with the sections. The Recents
 //             header has a hover-only icon button also labelled "New chat",
 //             and the logo is a[href="/"].
+//   16 Oct 26 Same, but the conversation panel can be collapsed, leaving only
+//             the rail: no nav to put a row in. The rail is nav[data-app-navigation-rail]
+//             > div[data-appearance] holding icon-only
+//             button[data-sidebar-destination] (Home, Space, Scheduled, Plugins,
+//             Sites), a popover "Explore" button and a divider; Sites sits alone
+//             in a nested div[data-appearance]. Each button's label is an
+//             sr-only span and its colour comes from --button-text-color(-hover).
 
 export const SELECTORS = {
   /** Conversation navs, most specific first. */
@@ -27,6 +34,8 @@ export const SELECTORS = {
   sidebarContainer: ['#app-shell-sidebar', 'aside[aria-label="Sidebar"]', '#stage-slideover-sidebar'],
   newChat: ['[data-testid="create-new-chat-button"]', 'a[aria-label="New chat"]', 'button[aria-label="New chat"]'],
   menuItem: ['[data-sidebar-destination]'],
+  /** The icon rail. It stays on screen when the conversation panel is collapsed. */
+  rail: 'nav[data-app-navigation-rail]',
   scrollArea: '[data-app-action-sidebar-scroll]',
   searchChats: ['[data-testid="search-conversations"]', '[data-testid*="search-chat" i]'],
   conversationLink: 'a[href*="/c/"]',
@@ -194,4 +203,46 @@ export function findEntrySlot(root: HTMLElement): EntrySlot | null {
 
   // Last resort: directly after New chat.
   return newChat ? after(newChat) : null
+}
+
+/**
+ * The icon rail, when it is on screen. Unlike the conversation panel it stays
+ * visible while that panel is collapsed. The 28 Sep layout keeps a hidden,
+ * inert copy that must not match.
+ */
+export function findRail(doc: Document = document): HTMLElement | null {
+  for (const el of doc.querySelectorAll<HTMLElement>(SELECTORS.rail)) {
+    if (!el.closest('[inert], [aria-hidden="true"]') && el.getClientRects().length > 0) return el
+  }
+  return null
+}
+
+/** Whether a click landed on one of the rail's destination buttons (Home, Space, Scheduled, …). */
+export function isRailDestination(target: EventTarget | null): boolean {
+  return target instanceof Element && !!target.closest(`${SELECTORS.rail} ${SELECTORS.menuItem.join(',')}`)
+}
+
+/** Width of the icon rail if it is on screen against the left edge, else 0. */
+export function railInset(doc: Document = document): number {
+  const box = findRail(doc)?.getBoundingClientRect()
+  return box && box.width > 0 && box.left < 4 ? Math.round(box.right) : 0
+}
+
+export interface RailSlot {
+  parent: HTMLElement
+  before: Node | null
+  /** A native rail button to copy size, radius and colours from. */
+  reference: HTMLElement
+}
+
+/** Where the History+ rail icon goes: right after the rail's last destination button. */
+export function findRailSlot(rail: HTMLElement): RailSlot | null {
+  const buttons = [...rail.querySelectorAll<HTMLElement>(SELECTORS.menuItem.join(','))].filter((b) => b.getClientRects().length > 0)
+  const last = buttons.at(-1)
+  if (!last) return null
+  const row = rowOf(last, rail)
+  if (!row.parentElement) return null
+  // The selected button (Home) is tinted; copy an idle one.
+  const reference = buttons.findLast((b) => !b.hasAttribute('data-selected')) ?? last
+  return { parent: row.parentElement, before: row.nextSibling, reference }
 }
