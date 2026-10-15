@@ -5,6 +5,7 @@
 import { useMemo, useRef } from 'react'
 import { parseDatePhrase, rangeForMonth, rangeForYear, type DateContext } from '../history/date-query'
 import { buildRows, sortEntries, type Entry, type Row } from '../history/grouping'
+import { buildRelatedRows, type RelatedEntry } from '../history/related-rows'
 import { inRanges, makeSearchDoc, matches, parseQuery, type FieldRange, type ParsedQuery, type SearchDoc } from '../history/search'
 import { effectiveTime, type HistoryIndex, type Settings, type StoredConversation } from '../history/types'
 import type { DateFilter, PresetId } from '../content/store'
@@ -74,8 +75,10 @@ export function useHistoryView(args: {
   collapsed: Record<string, boolean>
   transientCollapsed: Record<string, boolean>
   ctx: DateContext
+  /** Chats related to the open one; shown above Today when not searching. */
+  related: readonly RelatedEntry[]
 }): HistoryView {
-  const { index, indexRev, settings, query, literal, dateFilter, collapsed, transientCollapsed, ctx } = args
+  const { index, indexRev, settings, query, literal, dateFilter, collapsed, transientCollapsed, ctx, related } = args
   const mode = settings.timestampMode
 
   const sorted = useMemo(() => {
@@ -95,7 +98,7 @@ export function useHistoryView(args: {
     return sorted.filter((e) => matches(e.conv, docFor(e.conv), parsed, mode) && inRanges(e.conv, extra, mode))
   }, [sorted, parsed, filterRange, filtering, mode])
 
-  const rows = useMemo(
+  const chronological = useMemo(
     () =>
       buildRows(entries, {
         now: ctx.now,
@@ -107,6 +110,10 @@ export function useHistoryView(args: {
       }),
     [entries, ctx, settings.grouping, filtering, transientCollapsed, collapsed],
   )
+
+  // Searching shows matches only; the related block steps aside.
+  const relatedRows = useMemo(() => (filtering ? [] : buildRelatedRows(related, collapsed)), [filtering, related, collapsed])
+  const rows = useMemo(() => (relatedRows.length ? [...relatedRows, ...chronological] : chronological), [relatedRows, chronological])
 
   return { rows, sorted, parsed, filterRange, filtering, matchCount: entries.length, total: sorted.length }
 }

@@ -1,13 +1,15 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react'
 import type { HistoryApp } from '../content/app'
 import type { AppState } from '../content/store'
-import type { GroupRow, Row } from '../history/grouping'
+import type { GroupRow, RelatedHeaderRow, RelatedMoreRow, Row } from '../history/grouping'
 import { isMac } from '../shared/platform'
 import { formatRelativeAgo, getWeekStartsOn } from '../utils/dates'
 import { DateFilterMenu } from './DateFilterMenu'
 import { EmptyState, Skeleton } from './EmptyState'
 import { AlertIcon, BackIcon, CloseIcon, GearIcon, HistoryIcon, LockIcon, SearchIcon, SyncIcon } from './icons'
+import { RelatedHeader, RelatedItem, RelatedMore } from './RelatedSection'
 import { ConversationItem, Divider, GroupHeader } from './Rows'
+import { useRelated } from './related'
 import { SettingsView } from './Settings'
 import { ERROR_COPY, StatusBar } from './StatusBar'
 import { VirtualList } from './VirtualList'
@@ -63,7 +65,8 @@ function HistoryPanel({ app, state, closing }: { app: HistoryApp; state: AppStat
   const [reveal, setReveal] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
 
-  const view = useHistoryView({ ...state, transientCollapsed, ctx })
+  const related = useRelated(app, state)
+  const view = useHistoryView({ ...state, transientCollapsed, ctx, related })
   const { rows, parsed } = view
 
   // Search box focus on open / shortcut, and give focus back to ChatGPT on close.
@@ -106,6 +109,16 @@ function HistoryPanel({ app, state, closing }: { app: HistoryApp; state: AppStat
     [app, view.filtering],
   )
 
+  // "Related" header and "Show more" persist like date groups: same map, same save.
+  const toggleRelated = useCallback(
+    (row: RelatedHeaderRow | RelatedMoreRow) => {
+      app.toggleCollapsed(row.key, row.expanded)
+      setActiveKey(row.key)
+      setReveal((r) => r + 1)
+    },
+    [app],
+  )
+
   const openConversation = useCallback((id: string, newTab = false) => app.openConversation(id, { newTab }), [app])
 
   const move = (delta: number) => {
@@ -121,8 +134,10 @@ function HistoryPanel({ app, state, closing }: { app: HistoryApp; state: AppStat
   const activate = (newTab: boolean) => {
     const row: Row | undefined = activeIndex >= 0 ? rows[activeIndex] : rows.find((r) => r.type === 'conversation')
     if (!row) return
-    if (row.type === 'conversation') openConversation(row.entry.conv.id, newTab)
-    else if (row.type === 'group') toggleGroup(row)
+    if (row.type === 'conversation' || row.type === 'related') openConversation(row.entry.conv.id, newTab)
+    else if (row.type === 'group') {
+      if (row.collapsible) toggleGroup(row)
+    } else if (row.type === 'related-header' || row.type === 'related-more') toggleRelated(row)
   }
 
   const onSearchKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -272,21 +287,14 @@ function HistoryPanel({ app, state, closing }: { app: HistoryApp; state: AppStat
             activeIndex={activeIndex}
             reveal={reveal}
             onToggle={toggleGroup}
+            onToggleRelated={toggleRelated}
             onOpen={openConversation}
           />
 
           <div className="footer">
-            <span>
-              <kbd>↑</kbd>
-              <kbd>↓</kbd>navigate
+            <span className="synced" data-busy={syncing || undefined}>
+              {footerSyncText(state)}
             </span>
-            <span>
-              <kbd>↵</kbd>open
-            </span>
-            <span className="hint-extra">
-              <kbd>esc</kbd>close
-            </span>
-            <span className="synced">{footerSyncText(state)}</span>
           </div>
         </>
       )}
@@ -350,10 +358,11 @@ interface ListAreaProps {
   activeIndex: number
   reveal: number
   onToggle(row: GroupRow): void
+  onToggleRelated(row: RelatedHeaderRow | RelatedMoreRow): void
   onOpen(id: string): void
 }
 
-function ListArea({ app, state, view, now, activeIndex, reveal, onToggle, onOpen }: ListAreaProps) {
+function ListArea({ app, state, view, now, activeIndex, reveal, onToggle, onToggleRelated, onOpen }: ListAreaProps) {
   const { rows, parsed } = view
   const { index, sync, account } = state
 
@@ -468,6 +477,12 @@ function ListArea({ app, state, view, now, activeIndex, reveal, onToggle, onOpen
             return <GroupHeader row={row} id={rowId(i)} onToggle={onToggle} />
           case 'divider':
             return <Divider row={row} />
+          case 'related-header':
+            return <RelatedHeader row={row} id={rowId(i)} onToggle={onToggleRelated} />
+          case 'related-more':
+            return <RelatedMore row={row} id={rowId(i)} onToggle={onToggleRelated} />
+          case 'related':
+            return <RelatedItem row={row} id={rowId(i)} now={now} dateStyle={dateStyle} locale={locale} current={row.entry.conv.id === state.currentId} onOpen={onOpen} />
           default:
             return (
               <ConversationItem

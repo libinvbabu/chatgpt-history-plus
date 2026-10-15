@@ -4,11 +4,22 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { GroupRow, Row } from '../history/grouping'
 
-export const ROW_HEIGHT = { group0: 36, group1: 32, divider: 28, conversation: 54 } as const
+/** Must match the heights in styles.css. Compact: one line per conversation. */
+export const ROW_HEIGHT = { group0: 34, group1: 30, divider: 26, conversation: 32, more: 26 } as const
 
 export function heightOf(row: Row): number {
-  if (row.type === 'group') return row.level === 0 ? ROW_HEIGHT.group0 : ROW_HEIGHT.group1
-  return row.type === 'divider' ? ROW_HEIGHT.divider : ROW_HEIGHT.conversation
+  switch (row.type) {
+    case 'group':
+      return row.level === 0 ? ROW_HEIGHT.group0 : ROW_HEIGHT.group1
+    case 'related-header':
+      return ROW_HEIGHT.group0
+    case 'divider':
+      return ROW_HEIGHT.divider
+    case 'related-more':
+      return ROW_HEIGHT.more
+    default:
+      return ROW_HEIGHT.conversation
+  }
 }
 
 const OVERSCAN_PX = 400

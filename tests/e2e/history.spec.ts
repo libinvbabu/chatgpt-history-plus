@@ -306,17 +306,198 @@ test.describe('History+', () => {
     await expect(search(page)).toHaveValue('kisan pricing')
   })
 
-  test('remembers collapsed groups across reloads', async ({ page }) => {
+  test('Today is always open; other groups start collapsed and remember what you open', async ({ page }) => {
     await page.goto('https://chatgpt.com/')
     await openPanel(page)
     await waitForSync(page, 650)
-    const today = panel(page).locator('.list .group', { hasText: 'Today' }).first()
-    await today.click()
-    await expect(today).toHaveAttribute('aria-expanded', 'false')
+    const group = (name: string) => panel(page).locator('.list .group', { hasText: name }).first()
+
+    // Today: open, no chevron, nothing to click.
+    await expect(group('Today')).toHaveClass(/static/)
+    await expect(group('Today').locator('.chev')).toHaveCount(0)
+    await expect(group('Today')).not.toHaveAttribute('aria-expanded', /.*/)
+    await expect(group('Today').locator('.sublabel')).toHaveText(/\w{3}, \w{3} \d{1,2}/) // its date, on the right
+    // Everything else starts collapsed, with a count beside the title and a date range on the right.
+    await expect(group('Yesterday')).toHaveAttribute('aria-expanded', 'false')
+    await expect(group('Yesterday').locator('.n')).toHaveText('1')
+    await expect(group('Yesterday').locator('.sublabel')).toHaveText(/\w{3}, \w{3} \d{1,2}/)
+    await expect(rows(page).filter({ hasText: 'Mobile game ideas' })).toHaveCount(0)
+
+    // Expanding does not navigate; the choice survives a reload.
+    const url = page.url()
+    await group('Yesterday').click()
+    await expect(group('Yesterday')).toHaveAttribute('aria-expanded', 'true')
+    await expect(rows(page).filter({ hasText: 'Mobile game ideas' })).toHaveCount(1)
+    expect(page.url()).toBe(url)
     await page.waitForTimeout(400) // debounced save
     await page.reload()
     await openPanel(page)
-    await expect(panel(page).locator('.list .group', { hasText: 'Today' }).first()).toHaveAttribute('aria-expanded', 'false')
+    await expect(group('Yesterday')).toHaveAttribute('aria-expanded', 'true')
+
+    // Searching shows matches without opening anything, and clearing restores the groups as they were.
+    await search(page).fill('lottery-nothing')
+    await search(page).fill('paytm')
+    await expect(rows(page)).toHaveCount(3)
+    await search(page).fill('')
+    await expect(group('Yesterday')).toHaveAttribute('aria-expanded', 'true')
+    await expect(group('Earlier this week')).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('related to this chat: above Today, date + time, explained on hover, persistent, and it navigates', async ({ page, server }) => {
+    const current = server.byTitle('Review Razorpay Settlement PR #5150')
+    const followUp = server.byTitle('Razorpay PR 5150 follow-up fixes')
+    await page.goto(`https://chatgpt.com/c/${current.id}`)
+    await openPanel(page)
+    await waitForSync(page, 650)
+
+    const header = panel(page).locator('.related-head')
+    await expect(header.locator('.label')).toHaveText('Related to this chat')
+    await expect(header.locator('.n')).toHaveText('3') // three other chats about PR 5150
+    await expect(header).toHaveAttribute('aria-expanded', 'true')
+    // Immediately above Today, and visually quieter than it.
+    const ys = await panel(page).locator('.list .group').evaluateAll((els) => els.slice(0, 2).map((e) => [e.textContent, e.getBoundingClientRect().top]))
+    expect(String(ys[0]![0])).toMatch(/Related to this chat/)
+    expect(String(ys[1]![0])).toMatch(/^Today/)
+    expect(ys[0]![1] as number).toBeLessThan(ys[1]![1] as number)
+
+    // The two strongest, with a "Show 1 more" for the third; never the open chat itself.
+    const related = panel(page).locator('.conv.related')
+    await expect(related).toHaveCount(2)
+    await expect(panel(page).locator('.related-more')).toHaveText('Show 1 more')
+    await expect(related.filter({ hasText: 'Review Razorpay Settlement PR #5150' })).toHaveCount(0)
+    // Same density and structure as an ordinary row; date and time, compactly, on the right.
+    const row = related.filter({ hasText: 'follow-up fixes' })
+    await expect(row.locator('.cat svg')).toHaveCount(1)
+    await expect(row.locator('.when')).toHaveText(/^[A-Z][a-z]{2} \d{1,2}(, \d{4})? · \d{2}:\d{2}$/)
+    const heights = await panel(page).locator('.conv').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)))
+    expect(new Set(heights).size).toBe(1)
+    // The reason is hover text, derived from the match.
+    await expect(row).toHaveAttribute('title', /Related: Same PR number \(#5150\)/)
+
+    // "Show more" reveals the rest, and the choice sticks.
+    await panel(page).locator('.related-more').click()
+    await expect(related).toHaveCount(3)
+    await expect(panel(page).locator('.related-more')).toHaveText('Show less')
+
+    // Collapsing keeps only the header, and survives a reload.
+    await header.click()
+    await expect(related).toHaveCount(0)
+    await expect(header).toHaveAttribute('aria-expanded', 'false')
+    await page.waitForTimeout(400) // debounced save
+    await page.reload()
+    await openPanel(page)
+    await expect(panel(page).locator('.related-head')).toHaveAttribute('aria-expanded', 'false')
+    await panel(page).locator('.related-head').click()
+    await expect(related.first()).toBeVisible()
+
+    // Clicking a suggestion opens that chat; the block then re-centres on it and offers the one we left.
+    await related.filter({ hasText: 'follow-up fixes' }).click()
+    await page.waitForURL(`https://chatgpt.com/c/${followUp.id}`)
+    await expect(page.locator('#title')).toHaveText('Razorpay PR 5150 follow-up fixes')
+    await expect(panel(page)).toBeVisible()
+    await expect(panel(page).locator('.conv.related').filter({ hasText: 'Review Razorpay Settlement PR #5150' })).toHaveCount(1)
+    await expect(panel(page).locator('.conv.related').filter({ hasText: 'Razorpay PR 5150 follow-up fixes' })).toHaveCount(0)
+  })
+
+  test('related to this chat follows client-side navigation, hides when empty, and the open chat is highlighted', async ({ page, server }) => {
+    const razorpay = server.byTitle('Review Razorpay Settlement PR #5150')
+    const game = server.byTitle('Mobile game ideas')
+    const meta = server.byTitle('Investigate Meta sync failure')
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    await waitForSync(page, 650)
+    const go = (id: string) => page.evaluate((path) => history.pushState({}, '', path), `/c/${id}`)
+    const head = panel(page).locator('.related-head')
+
+    await expect(head).toHaveCount(0) // no open chat
+    await go(razorpay.id)
+    await expect(head).toBeVisible()
+    await go(game.id) // nothing about it elsewhere: the section goes away, no placeholder
+    await expect(head).toHaveCount(0)
+    await expect(panel(page).locator('.conv.related')).toHaveCount(0)
+    await go(razorpay.id)
+    await expect(head).toBeVisible()
+
+    // The open chat's row is highlighted at once, and the highlight moves with navigation.
+    await go(meta.id)
+    const current = panel(page).locator('.conv[aria-current="page"]')
+    await expect(current).toHaveCount(1)
+    await expect(current).toContainText('Investigate Meta sync failure')
+    await page.goBack()
+    await expect(head).toBeVisible() // back/forward are navigations too
+    await expect(panel(page).locator('.conv[aria-current="page"]')).toHaveCount(0) // Razorpay chat is in a collapsed group
+  })
+
+  test('opening another chat does not reset the list scroll position', async ({ page, server }) => {
+    const meta = server.byTitle('Investigate Meta sync failure')
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    await waitForSync(page, 650)
+    await panel(page).locator('.list .group', { hasText: 'Earlier this week' }).click()
+    const list = panel(page).locator('.list')
+    await list.evaluate((el) => (el.scrollTop = 400))
+    await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBe(400)
+    await page.evaluate((path) => history.pushState({}, '', path), `/c/${meta.id}`)
+    await page.waitForTimeout(500)
+    expect(await list.evaluate((el) => el.scrollTop)).toBe(400)
+  })
+
+  test('rows are one line: category icon, title, right-aligned 24-hour time', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    await waitForSync(page, 650)
+    const todays = panel(page).locator('.conv')
+    await expect(todays).toHaveCount(2)
+    const m = await todays.evaluateAll((els) =>
+      els.map((e) => {
+        const r = e.getBoundingClientRect()
+        const cat = e.querySelector('.cat')!.getBoundingClientRect()
+        const title = e.querySelector('.title')!.getBoundingClientRect()
+        const when = e.querySelector('.when') as HTMLElement
+        const w = when.getBoundingClientRect()
+        return { h: r.height, catLeft: cat.left - r.left, titleLeft: title.left, whenRight: w.right, rowRight: r.right, when: when.textContent, tab: getComputedStyle(when).fontVariantNumeric }
+      }),
+    )
+    for (const row of m) {
+      expect(row.h).toBeLessThanOrEqual(32) // compact
+      expect(row.when).toMatch(/^\d{2}:\d{2}$/)
+      expect(row.tab).toContain('tabular-nums')
+    }
+    expect(Math.abs(m[0]!.whenRight - m[1]!.whenRight)).toBeLessThan(1) // times line up
+    expect(Math.abs(m[0]!.catLeft - m[1]!.catLeft)).toBeLessThan(1) // icons line up
+    expect(Math.abs(m[0]!.titleLeft - m[1]!.titleLeft)).toBeLessThan(1)
+    // Category name on hover (the icon), full title and timestamps on the row.
+    await expect(todays.filter({ hasText: 'Investigate Meta sync failure' }).locator('.cat')).toHaveAttribute('title', 'Debugging')
+    await expect(todays.filter({ hasText: 'Review duplicate Paytm debit query' }).locator('.cat')).toHaveAttribute('title', 'Payments')
+    await expect(todays.first()).toHaveAttribute('title', /Created: .*\nLast active: /)
+  })
+
+  test('stays usable at narrow widths: long titles ellipsise and nothing scrolls sideways', async ({ page, server }) => {
+    server.conversations[0]!.title = 'A very long conversation title about reviewing Razorpay settlement reconciliation across every provider and every region'
+    await page.setViewportSize({ width: 360, height: 760 })
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    await waitForSync(page, 650)
+    const m = await page.evaluate(() => {
+      const root = document.getElementById('chatgpt-history-plus-root')!.shadowRoot!
+      const p = root.querySelector('.panel')!
+      const list = root.querySelector('.list')!
+      const title = root.querySelector('.conv .title') as HTMLElement
+      const row = root.querySelector('.conv') as HTMLElement
+      const when = row.querySelector('.when')!.getBoundingClientRect()
+      return {
+        panelOverflow: p.scrollWidth - p.clientWidth,
+        listOverflow: list.scrollWidth - list.clientWidth,
+        ellipsis: getComputedStyle(title).textOverflow === 'ellipsis' && title.scrollWidth > title.clientWidth,
+        timeInsideRow: when.right <= row.getBoundingClientRect().right + 0.5,
+        panelWidth: Math.round(p.getBoundingClientRect().width),
+      }
+    })
+    expect(m.panelOverflow).toBeLessThanOrEqual(0)
+    expect(m.listOverflow).toBeLessThanOrEqual(0)
+    expect(m.ellipsis).toBe(true)
+    expect(m.timeInsideRow).toBe(true)
+    expect(m.panelWidth).toBeLessThanOrEqual(360)
   })
 
   test('keeps the cached history usable when ChatGPT’s API fails', async ({ page, server }) => {

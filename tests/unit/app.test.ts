@@ -32,7 +32,60 @@ function provider(opts: { total?: number; accountKey?: string; signedOut?: boole
   }
 }
 
+/** Titles that make chats c1 and c2 related (same PR), so the engine has something to find. */
+function relatedProvider(): ConversationProvider {
+  const titles = ['Review Paytm Autopay PR #4294', 'Autopay PR 4294 hotfix', 'Autopay PR 4294 rollout notes', 'Weekend trip itinerary', 'Kitchen renovation budget']
+  return {
+    async connect() {
+      return {
+        accountKey: 'acct-r',
+        async list(): Promise<ConversationPage> {
+          const items = titles.map((title, i) => ({ id: `c${i}`, title, createdAt: 1e12 - i, updatedAt: 1e12 - i }))
+          return { items, rawCount: items.length, malformed: 0, total: items.length, stats }
+        },
+      }
+    },
+  }
+}
+
+const settle = (ms = 400) => new Promise((resolve) => setTimeout(resolve, ms))
+
 describe('HistoryApp', () => {
+  it('keeps the related-chats index in step with the synced history, and drops it on clear', async () => {
+    const app = new HistoryApp({ kv: memoryStore(), provider: relatedProvider(), pageDelayMs: 0 })
+    await app.init()
+    expect(app.state.relatedRev).toBe(0)
+    await app.open()
+    await settle() // debounce + slices
+
+    expect(app.related.stats().docs).toBe(5)
+    expect(app.state.relatedRev).toBe(app.related.version)
+    expect(app.state.relatedRev).toBeGreaterThan(0)
+    expect(app.related.related('c0', { now: 1e12 }).map((r) => r.id).sort()).toEqual(['c1', 'c2'])
+
+    await app.clearAllData()
+    expect(app.related.stats().docs).toBe(0)
+    expect(app.related.related('c0')).toEqual([])
+    app.dispose()
+  })
+
+  it('forgets a cached history for a signed-out user: no related suggestions either', async () => {
+    const kv = memoryStore()
+    const a = new HistoryApp({ kv, provider: relatedProvider(), pageDelayMs: 0 })
+    await a.init()
+    await a.open()
+    await settle()
+    expect(a.related.stats().docs).toBe(5)
+    a.dispose()
+
+    const b = new HistoryApp({ kv, provider: provider({ signedOut: true }), pageDelayMs: 0 })
+    await b.init()
+    await b.open()
+    await settle()
+    expect(b.related.stats().docs).toBe(0)
+    b.dispose()
+  })
+
   it('syncs on first open and persists the index under a hashed account key', async () => {
     const kv = memoryStore()
     const app = new HistoryApp({ kv, provider: provider(), pageDelayMs: 0 })

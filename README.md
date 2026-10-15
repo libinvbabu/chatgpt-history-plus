@@ -34,7 +34,8 @@ History+ adds the missing piece, **time**:
 
 ## Features
 
-- **Your whole history, by date.** Today, Yesterday, Earlier this week, Last week, then months and years. Big weeks get day dividers and big months get week dividers. Groups collapse and remember it.
+- **Your whole history, by date.** Today (always open), then Yesterday, Earlier this week, Last week, months and years, all collapsed until you open them, with a count and a date on every header. Each chat is one line: a category icon, the title, and its time (`21:41`). Your choices are remembered.
+- **Related to this chat.** Above Today, the two chats most related to the one you have open (more on request): the same PR, the same project, the same recurring problem. Hover a row to see why it matched. It is worked out on your device from titles, and shows nothing rather than a weak guess.
 - **Dates in ChatGPT's own sidebar.** A small date appears beside every conversation ChatGPT lists.
 - **Instant search that understands dates.** Try `roadmap last month`, `around sep 14`, `invoice in:aug` or `created:2026-07`. Search covers titles only, never needs the network, and handles 10,000+ chats easily.
 - **Last active or Created.** Switch which date drives the timeline; hover a row to see both.
@@ -50,7 +51,7 @@ History+ adds the missing piece, **time**:
 
 History+ reads **conversation titles, ids and timestamps** from chatgpt.com, the same list ChatGPT's own sidebar loads, and keeps them in your browser's extension storage.
 
-- **No message content** is ever read.
+- **No message content** is ever read. "Related to this chat" is worked out in memory from titles alone: no extra data is stored, and there are no AI or network calls.
 - **Nothing leaves your device.** There are no servers, analytics or third parties; the only requests go to chatgpt.com.
 - **Your session token** is held in memory for one sync and never stored.
 - **Permissions:** just `storage` and access to `chatgpt.com`.

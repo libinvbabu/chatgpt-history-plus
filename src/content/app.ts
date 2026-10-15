@@ -8,6 +8,7 @@ import { isAbortError, ProviderError, type ConversationProvider, type ProviderSe
 import { MetadataRepository, WRITER_ID, type StoredIndex } from '../history/repository'
 import { PACING, newDiagnostics, syncIndex, type Pacing, type SyncDiagnostics, type SyncMode } from '../history/sync'
 import { emptyIndex, type HistoryIndex, type Settings } from '../history/types'
+import { RelatedEngine } from '../related/engine'
 import { KEYS, type KeyValueStore } from '../storage'
 import { migrateIndex, migrateSettings } from '../storage/migrations'
 import { navigateToConversation } from './navigation'
@@ -21,6 +22,9 @@ const BACKGROUND_SYNC_AFTER_MS = 10 * 60_000
 const RESTORE_WINDOW_MS = 15_000
 /** How long automatic syncs stay off after a run gives up on a rate limit (unless ChatGPT says otherwise). */
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000
+/** Wait for sync bursts to settle before re-indexing related conversations, then work in slices this long. */
+const RELATED_DEBOUNCE_MS = 150
+const RELATED_SLICE_MS = 8
 
 interface StoredPacing {
   delayMs?: number
@@ -60,6 +64,11 @@ export interface SyncOptions {
 
 export class HistoryApp {
   readonly store: Store<AppState> = createStore(initialState())
+  /** Local "related to this chat" index, derived from the synced history. Never persisted. */
+  readonly related = new RelatedEngine()
+  private relatedTimer: ReturnType<typeof setTimeout> | undefined
+  private relatedRun = 0
+  private relatedSeen: { index: HistoryIndex | null; rev: number } = { index: null, rev: -1 }
   private readonly repo: MetadataRepository
   private readonly now: () => number
   private identifying: Promise<ProviderSession | null> | null = null
@@ -108,6 +117,7 @@ export class HistoryApp {
       currentId: conversationIdFromPath(location.pathname),
     })
     this.disposers.push(this.deps.kv.onChanged((changes) => this.onStorageChanged(changes)))
+    this.disposers.push(this.store.subscribe(() => this.onHistoryChanged()))
 
     if (restore) {
       await this.deps.kv.remove(KEYS.restore)
@@ -135,7 +145,36 @@ export class HistoryApp {
   dispose(): void {
     this.syncAbort?.abort()
     clearTimeout(this.resumeTimer)
+    clearTimeout(this.relatedTimer)
+    this.relatedRun++
     for (const d of this.disposers.splice(0)) d()
+  }
+
+  // -------------------------------------------------------------------------
+  // Related conversations
+
+  /** The history changed (loaded, synced, switched account, cleared): refresh the related index soon. */
+  private onHistoryChanged(): void {
+    const s = this.state
+    if (s.index === this.relatedSeen.index && s.indexRev === this.relatedSeen.rev) return
+    this.relatedSeen = { index: s.index, rev: s.indexRev }
+    clearTimeout(this.relatedTimer)
+    this.relatedTimer = setTimeout(() => void this.refreshRelated(), RELATED_DEBOUNCE_MS)
+  }
+
+  /**
+   * Diff the history against the related index and index what changed in short
+   * slices, yielding to the page in between so a first backfill of thousands of
+   * titles never blocks typing or scrolling. A newer change supersedes this run.
+   */
+  private async refreshRelated(): Promise<void> {
+    const run = ++this.relatedRun
+    this.related.plan(this.state.index)
+    while (this.related.step(RELATED_SLICE_MS)) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      if (run !== this.relatedRun) return
+    }
+    if (run === this.relatedRun && this.related.version !== this.state.relatedRev) this.store.set({ relatedRev: this.related.version })
   }
 
   // -------------------------------------------------------------------------
@@ -367,7 +406,8 @@ export class HistoryApp {
     const result = navigateToConversation(id, {
       newTab: opts.newTab,
       beforeReload: () => {
-        // A full page load is coming; bring the panel back in the same place.
+        // A full page load is coming; keep what was just toggled, and bring the panel back in the same place.
+        this.flushUi()
         const s = this.state
         const restore: RestoreState = {
           until: this.now() + RESTORE_WINDOW_MS,
@@ -399,6 +439,8 @@ export class HistoryApp {
     this.generation++
     this.cancelSync()
     await this.repo.clearAll()
+    this.relatedRun++
+    this.related.reset()
     this.lastAccountKey = null
     this.store.set((s) => ({
       ...initialState(),
@@ -409,6 +451,7 @@ export class HistoryApp {
       accountKey: s.accountKey,
       currentId: s.currentId,
       indexRev: s.indexRev + 1,
+      relatedRev: this.related.version,
       sync: initialSync,
       paused: true,
     }))
@@ -453,10 +496,21 @@ export class HistoryApp {
 
   private saveUi(): void {
     clearTimeout(this.uiSaveTimer)
-    this.uiSaveTimer = setTimeout(() => {
-      const ui: UiPrefs = { collapsed: this.state.collapsed, lastAccountKey: this.lastAccountKey ?? undefined, writer: WRITER_ID }
-      void this.deps.kv.set({ [KEYS.ui]: ui }).catch(() => {})
-    }, 250)
+    this.uiSaveTimer = setTimeout(() => this.writeUi(), 250)
+  }
+
+  private writeUi(): void {
+    this.uiSaveTimer = undefined
+    const ui: UiPrefs = { collapsed: this.state.collapsed, lastAccountKey: this.lastAccountKey ?? undefined, writer: WRITER_ID }
+    void this.deps.kv.set({ [KEYS.ui]: ui }).catch(() => {})
+  }
+
+  /** Write any pending preference change now: a page load is about to throw the debounce timer away. */
+  private flushUi(): void {
+    if (this.uiSaveTimer !== undefined) {
+      clearTimeout(this.uiSaveTimer)
+      this.writeUi()
+    }
   }
 
   private onStorageChanged(changes: Record<string, { newValue?: unknown }>): void {

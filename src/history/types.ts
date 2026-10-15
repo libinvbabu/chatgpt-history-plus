@@ -6,6 +6,12 @@ export interface ConversationMetadata {
   updatedAt: number | null
   archived?: boolean
   gizmoId?: string | null
+  /**
+   * Primary category, when something other than the title rules supplies one
+   * (a future classifier or importer). Unset today; the UI then derives it from
+   * the title. See src/related/extract.ts `categoryFor`.
+   */
+  category?: string | null
 }
 
 export interface StoredConversation extends ConversationMetadata {

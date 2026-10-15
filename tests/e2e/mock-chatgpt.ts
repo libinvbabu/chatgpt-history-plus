@@ -47,6 +47,10 @@ const SHOWCASE_NAMES = [
   'Quarterly OKR draft',
   'Invoice reconciliation script',
   'Kitchen renovation budget',
+  'Review export module PR #5150',
+  'Export PR 5150 follow-up fixes',
+  'Module PR 5150 rollout notes',
+  'PR 5150 rollback plan',
 ]
 
 /** Named conversations the tests look for, placed at fixed relative days. */
@@ -66,6 +70,11 @@ export function makeDataset(total: number, now = Date.now(), showcase = false) {
     ['Apple developer enrolment', at(12, 0.6)],
     ['Paytm reconciliation', at(40, 0.4), at(70, 0.3)],
     ['Kisan pricing model', at(400, 0.5)],
+    // Three chats about one PR, for the "Related to this chat" tests. (No "Paytm": other tests count those.)
+    ['Review Razorpay Settlement PR #5150', at(6, 0.5)],
+    ['Razorpay PR 5150 follow-up fixes', at(3, 0.3)],
+    ['Settlement PR 5150 rollout notes', at(33, 0.4)],
+    ['PR 5150 rollback plan', at(12, 0.6)],
   ]
   if (showcase) named.forEach((row, i) => (row[0] = SHOWCASE_NAMES[i]!))
   const items: MockConversation[] = []

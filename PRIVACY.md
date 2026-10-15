@@ -1,6 +1,6 @@
 # Privacy policy: History+ for ChatGPT
 
-_Last updated: 28 September 2026_
+_Last updated: 16 October 2026_
 
 **Short version:** History+ reads conversation titles, IDs and timestamps from the ChatGPT web application solely to organize your conversation history. This information remains locally on your device and is not transmitted to the developer or third parties.
 
@@ -14,6 +14,10 @@ When you use History+ on chatgpt.com, it requests your conversation list from Ch
 - whether it is archived, and the ID of the GPT/Project it belongs to (if any)
 
 It does **not** read message content, prompts, responses, files, or account details.
+
+## Related conversations
+
+The "Related to this chat" section is computed on your device from the titles and timestamps above, using fixed rules (shared PR numbers, repositories, tickets, tool and provider names, and distinctive words). It runs in memory each time a page loads, is never written to storage, and makes no network or AI calls, so it adds nothing to what is stored and is removed with everything else when you clear local data or sign out.
 
 To make those requests, History+ uses ChatGPT's short-lived session token. The token is held in memory only for the duration of a sync and is never stored or logged.
 

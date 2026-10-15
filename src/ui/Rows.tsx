@@ -1,10 +1,29 @@
 import { memo, type ReactNode } from 'react'
 import type { ConversationRow, DividerRow, GroupRow } from '../history/grouping'
 import { highlightRanges, type SearchTerm } from '../history/search'
+import type { StoredConversation } from '../history/types'
+import { categoryFor } from '../related/extract'
 import { formatFull, formatRowTime, type DateStyle } from '../utils/dates'
+import { CategoryIcon } from './CategoryIcon'
 import { ChevronIcon } from './icons'
 
+/** Section header: `▸ TITLE  count ………… date`. Today is always open, so it has no chevron and no click. */
 export const GroupHeader = memo(function GroupHeader({ row, id, onToggle }: { row: GroupRow; id?: string; onToggle(row: GroupRow): void }) {
+  const content = (
+    <>
+      {row.collapsible ? <ChevronIcon /> : <span className="chev-spacer" aria-hidden="true" />}
+      <span className="label">{row.label}</span>
+      <span className="n">{row.count.toLocaleString()}</span>
+      {row.sublabel && <span className="sublabel">{row.sublabel}</span>}
+    </>
+  )
+  if (!row.collapsible) {
+    return (
+      <div id={id} className="group static" role="treeitem" aria-level={row.level + 1} data-level={row.level}>
+        {content}
+      </div>
+    )
+  }
   return (
     <button
       type="button"
@@ -17,10 +36,7 @@ export const GroupHeader = memo(function GroupHeader({ row, id, onToggle }: { ro
       tabIndex={-1}
       onClick={() => onToggle(row)}
     >
-      <ChevronIcon />
-      <span className="label">{row.label}</span>
-      {row.sublabel && <span className="sublabel">{row.sublabel}</span>}
-      <span className="n">{row.count.toLocaleString()}</span>
+      {content}
     </button>
   )
 })
@@ -32,6 +48,60 @@ export function Divider({ row }: { row: DividerRow }) {
       <span className="n">{row.count}</span>
     </div>
   )
+}
+
+interface LinkProps {
+  conv: StoredConversation
+  id?: string
+  /** aria-level of the row in the tree. */
+  ariaLevel: number
+  /** Indent: 1 for months nested under a year. */
+  level: 0 | 1
+  when: string
+  tooltip: string
+  terms?: readonly SearchTerm[]
+  current: boolean
+  related?: boolean
+  onOpen(id: string): void
+}
+
+/** One conversation line: `[category icon] title ………… time`. Shared by the date groups and the related block. */
+export const ConversationLink = memo(function ConversationLink({ conv, id, ariaLevel, level, when, tooltip, terms, current, related, onOpen }: LinkProps) {
+  const title = conv.title || 'Untitled conversation'
+  return (
+    <a
+      id={id}
+      className={related ? 'conv related' : 'conv'}
+      role="treeitem"
+      aria-level={ariaLevel}
+      aria-current={current ? 'page' : undefined}
+      data-level={level}
+      href={`/c/${conv.id}`}
+      title={tooltip}
+      tabIndex={-1}
+      onClick={(e) => {
+        // Let the browser handle new-tab/window clicks natively.
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+        e.preventDefault()
+        onOpen(conv.id)
+      }}
+    >
+      <CategoryIcon category={categoryFor(conv)} />
+      <span className={conv.title ? 'title' : 'title untitled'}>{conv.title && terms ? highlight(title, terms) : title}</span>
+      <span className="meta">
+        {conv.archived && <span className="badge">Archived</span>}
+        <span className="when">{when}</span>
+      </span>
+    </a>
+  )
+})
+
+/** The hover text: full title, both timestamps, and (for related rows) why it matched. */
+export function conversationTooltip(conv: StoredConversation, locale?: string, reason?: string): string {
+  const title = conv.title || 'Untitled conversation'
+  const lines = [title, `Created: ${conv.createdAt ? formatFull(conv.createdAt, locale) : '—'}`, `Last active: ${conv.updatedAt ? formatFull(conv.updatedAt, locale) : '—'}`]
+  if (reason) lines.push('', `Related: ${reason}`)
+  return lines.join('\n')
 }
 
 interface ConversationProps {
@@ -47,33 +117,19 @@ interface ConversationProps {
 
 export const ConversationItem = memo(function ConversationItem({ row, id, now, dateStyle, locale, terms, current, onOpen }: ConversationProps) {
   const { conv, ts } = row.entry
-  const title = conv.title || 'Untitled conversation'
   const when = ts == null ? 'No date' : formatRowTime(ts, row.timeOnly, dateStyle, now, locale)
-  const tooltip = `${title}\nCreated: ${conv.createdAt ? formatFull(conv.createdAt, locale) : '—'}\nLast active: ${conv.updatedAt ? formatFull(conv.updatedAt, locale) : '—'}`
   return (
-    <a
+    <ConversationLink
+      conv={conv}
       id={id}
-      className="conv"
-      role="treeitem"
-      aria-level={row.level + 2}
-      aria-current={current ? 'page' : undefined}
-      data-level={row.level}
-      href={`/c/${conv.id}`}
-      title={tooltip}
-      tabIndex={-1}
-      onClick={(e) => {
-        // Let the browser handle new-tab/window clicks natively.
-        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
-        e.preventDefault()
-        onOpen(conv.id)
-      }}
-    >
-      <span className={conv.title ? 'title' : 'title untitled'}>{conv.title ? highlight(title, terms) : title}</span>
-      <span className="meta">
-        {when}
-        {conv.archived && <span className="badge">Archived</span>}
-      </span>
-    </a>
+      ariaLevel={row.level + 2}
+      level={row.level}
+      when={when}
+      tooltip={conversationTooltip(conv, locale)}
+      terms={terms}
+      current={current}
+      onOpen={onOpen}
+    />
   )
 })
 

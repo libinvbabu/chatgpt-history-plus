@@ -41,6 +41,8 @@ export interface AppState {
   index: HistoryIndex | null
   /** Bumped whenever `index` is mutated in place. */
   indexRev: number
+  /** The related-conversations engine's version; bumped when its index changes. */
+  relatedRev: number
   settings: Settings
   collapsed: Record<string, boolean>
   sync: SyncState
@@ -79,6 +81,7 @@ export function initialState(): AppState {
     accountKey: null,
     index: null,
     indexRev: 0,
+    relatedRev: 0,
     settings: { ...DEFAULT_SETTINGS },
     collapsed: {},
     sync: initialSync,

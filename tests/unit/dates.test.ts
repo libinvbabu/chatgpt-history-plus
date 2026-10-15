@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, formatCompact, formatDayRange, formatRowTime, getWeekStartsOn, startOfWeek } from '../../src/utils/dates'
+import { addDays, formatCompact, formatDayRange, formatDateTime, formatRowTime, getWeekStartsOn, startOfWeek } from '../../src/utils/dates'
 import { NOW, at } from './helpers'
 
 describe('calendar maths', () => {
@@ -20,13 +20,20 @@ describe('calendar maths', () => {
 
 describe('formatting', () => {
   it('formats row times by context', () => {
-    expect(formatRowTime(at(2026, 9, 28, 10, 5), true, 'relative', NOW, 'en-US')).toBe('10:05 AM')
-    expect(formatRowTime(at(2026, 9, 25, 15, 42), false, 'relative', NOW, 'en-US')).toBe('Fri, Sep 25 · 3:42 PM')
-    expect(formatRowTime(at(2025, 12, 14, 9, 0), false, 'relative', NOW, 'en-US')).toBe('Sun, Dec 14, 2025 · 9:00 AM')
-    expect(formatRowTime(at(2026, 9, 25, 15, 42), true, 'absolute', NOW, 'en-US')).toBe('Sep 25, 2026 · 3:42 PM')
+    expect(formatRowTime(at(2026, 9, 28, 10, 5), true, 'relative', NOW, 'en-US')).toBe('10:05')
+    expect(formatRowTime(at(2026, 9, 25, 15, 42), false, 'relative', NOW, 'en-US')).toBe('Sep 25 · 15:42')
+    expect(formatRowTime(at(2025, 12, 14, 9, 0), false, 'relative', NOW, 'en-US')).toBe('Dec 14, 2025 · 09:00')
+    expect(formatRowTime(at(2026, 9, 25, 15, 42), true, 'absolute', NOW, 'en-US')).toBe('Sep 25, 2026 · 15:42')
+  })
+  it('uses fixed-width 24-hour times, including just after midnight', () => {
+    expect(formatRowTime(at(2026, 9, 28, 0, 9), true, 'relative', NOW, 'en-US')).toBe('00:09')
+    expect(formatRowTime(at(2026, 9, 28, 21, 41), true, 'relative', NOW, 'en-US')).toBe('21:41')
+    expect(formatRowTime(at(2026, 9, 28, 12, 0), true, 'relative', NOW, 'de-DE')).toBe('12:00')
+    expect(formatDateTime(at(2026, 10, 14, 7, 5), NOW, 'en-US')).toBe('Oct 14 · 07:05')
+    expect(formatDateTime(at(2025, 10, 14, 7, 5), NOW, 'en-US')).toBe('Oct 14, 2025 · 07:05')
   })
   it('formats compact sidebar dates', () => {
-    expect(formatCompact(at(2026, 9, 28, 10, 5), NOW, 'en-US')).toBe('10:05 AM')
+    expect(formatCompact(at(2026, 9, 28, 10, 5), NOW, 'en-US')).toBe('10:05')
     expect(formatCompact(at(2026, 9, 24), NOW, 'en-US')).toBe('Sep 24')
     expect(formatCompact(at(2025, 12, 14), NOW, 'en-US')).toBe('Dec 2025')
   })

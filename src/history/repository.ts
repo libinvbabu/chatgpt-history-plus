@@ -35,6 +35,8 @@ export function mergeItems(index: HistoryIndex, items: readonly ConversationMeta
     }
     if (item.archived) next.archived = true
     if (item.gizmoId) next.gizmoId = item.gizmoId
+    const category = item.category ?? cached?.category
+    if (category) next.category = category
     index.conversations[item.id] = next
   }
   return { added, changed }

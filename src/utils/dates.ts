@@ -93,7 +93,8 @@ export function formatters(locale?: string): Formatters {
   if (!f) {
     const l = key || undefined
     f = {
-      time: new Intl.DateTimeFormat(l, { hour: 'numeric', minute: '2-digit' }),
+      // 24-hour, zero-padded, in the user's local timezone: "21:41", "00:09". Fixed width, so times align.
+      time: new Intl.DateTimeFormat(l, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }),
       weekdayMonthDay: new Intl.DateTimeFormat(l, { weekday: 'short', month: 'short', day: 'numeric' }),
       weekdayMonthDayYear: new Intl.DateTimeFormat(l, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
       monthDay: new Intl.DateTimeFormat(l, { month: 'short', day: 'numeric' }),
@@ -125,22 +126,24 @@ export function formatFull(ts: number, locale?: string): string {
   return `${f.monthDayYear.format(ts)} · ${f.time.format(ts)}`
 }
 
-/**
- * Label under a conversation title. In relative mode, rows inside the
- * Today/Yesterday groups only need a time; everything else gets a weekday
- * and date, with the year when it is not the current year.
- */
-export function formatRowTime(ts: number, timeOnly: boolean, style: DateStyle, now: Date, locale?: string): string {
+/** "Oct 14 · 21:41", with the year when it is not the current one: the compact date + time used where no header names the day. */
+export function formatDateTime(ts: number, now: Date, locale?: string): string {
   const f = formatters(locale)
-  if (style === 'absolute') return formatFull(ts, locale)
-  const time = f.time.format(ts)
-  if (timeOnly) return time
-  const d = new Date(ts)
-  const date = d.getFullYear() === now.getFullYear() ? f.weekdayMonthDay.format(d) : f.weekdayMonthDayYear.format(d)
-  return `${date} · ${time}`
+  const date = new Date(ts).getFullYear() === now.getFullYear() ? f.monthDay : f.monthDayYear
+  return `${date.format(ts)} · ${f.time.format(ts)}`
 }
 
-/** Compact label for the native ChatGPT sidebar: "10:05 AM", "Sep 24", "Dec 2025". */
+/**
+ * The time on the right of a conversation row. Rows under a header or divider
+ * that already names the day only need a time ("21:41"); others carry a compact
+ * date as well ("Oct 14 · 21:41"). Absolute mode always shows both, in full.
+ */
+export function formatRowTime(ts: number, timeOnly: boolean, style: DateStyle, now: Date, locale?: string): string {
+  if (style === 'absolute') return formatFull(ts, locale)
+  return timeOnly ? formatters(locale).time.format(ts) : formatDateTime(ts, now, locale)
+}
+
+/** Compact label for the native ChatGPT sidebar: "10:05", "Sep 24", "Dec 2025". */
 export function formatCompact(ts: number, now: Date, locale?: string): string {
   const f = formatters(locale)
   if (isSameDay(ts, now)) return f.time.format(ts)

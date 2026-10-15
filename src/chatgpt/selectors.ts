@@ -206,6 +206,15 @@ export function findEntrySlot(root: HTMLElement): EntrySlot | null {
 }
 
 /**
+ * The open conversation's title as the page shows it, for a chat that has not
+ * synced into History+ yet. Null while the page still says just "ChatGPT".
+ */
+export function pageConversationTitle(doc: Document = document): string | null {
+  const title = doc.title.replace(/\s*[|\-–—]\s*ChatGPT\s*$/i, '').trim()
+  return title && !/^(chatgpt|new chat)$/i.test(title) ? title : null
+}
+
+/**
  * The icon rail, when it is on screen. Unlike the conversation panel it stays
  * visible while that panel is collapsed. The 28 Sep layout keeps a hidden,
  * inert copy that must not match.
