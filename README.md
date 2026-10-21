@@ -34,7 +34,8 @@ History+ adds the missing piece, **time**:
 
 ## Features
 
-- **Your whole history, by date.** Today (always open), then Yesterday, Earlier this week, Last week, months and years, all collapsed until you open them, with a count and a date on every header. Each chat is one line: a category icon, the title, and its time (`21:41`). Your choices are remembered.
+- **Your whole history, by date.** Today (always open), then Yesterday, Earlier this week, Last week and Older conversations (month by month inside), all collapsed until you open them, with a count and a date on every header. Each chat is one line: a small category icon, the title, and its time (`09:41 PM`, or `21:41` if you switch to 24-hour in Settings). Your choices are remembered.
+- **Category filters.** One scrollable row of chips under the search box (Reviews, Engineering, Analytics, Product, Payments, Writing, Other) narrows the list to one kind of chat. Hover a chip to see how many chats it would show for your current search and dates. They work together with search, the date filter and sorting. Your pick is remembered. Categories are worked out on your device from titles, with no extra requests.
 - **Related to this chat.** Above Today, the two chats most related to the one you have open (more on request): the same PR, the same project, the same recurring problem. Hover a row to see why it matched. It is worked out on your device from titles, and shows nothing rather than a weak guess.
 - **Dates in ChatGPT's own sidebar.** A small date appears beside every conversation ChatGPT lists.
 - **Instant search that understands dates.** Try `roadmap last month`, `around sep 14`, `invoice in:aug` or `created:2026-07`. Search covers titles only, never needs the network, and handles 10,000+ chats easily.

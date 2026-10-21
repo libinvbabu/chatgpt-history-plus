@@ -165,3 +165,77 @@ export const CATEGORY_LABELS: Record<CategoryId, string> = {
   writing: 'Writing',
   general: 'General',
 }
+
+// ---------------------------------------------------------------------------
+// Category signals: what the icon classifier (categorize.ts) looks for.
+//
+// Kept apart from TOPICS and ACTIVITY_RULES on purpose: those drive "Related to
+// this chat", and teaching the icon a word must not change what counts as
+// related. Patterns run on the lower-cased title with punctuation turned into
+// spaces. Weight: 3 = settles it on its own, 2 = clear, 1 = a hint (never
+// enough alone: a category needs a score of 2).
+
+export type Signals = Array<[pattern: RegExp, weight: 1 | 2 | 3]>
+
+/** A title that names a pull request, or a review of code, is a PR review whatever it is about. */
+export const PR_REVIEW_SIGNALS: RegExp[] = [
+  /\b(pr|prs|pull requests?|merge requests?)\b/, // not "MR": too often a person ("Mr Sharma")
+  /\bcode ?reviews?\b/,
+  // "Review Kisan backend changes", "review the diff", "reviewing my commits"
+  /\breview(?:ing|ed)? (?:\S+ ){0,3}(?:changes|diffs?|commits?|code|branch|patch(?:es)?)\b/,
+]
+
+export const CATEGORY_SIGNALS: Record<Exclude<CategoryId, 'code-review'>, Signals> = {
+  debugging: [
+    [/\b(bugs?|crash\w*|errors?|exceptions?|stack ?traces?|broken|regressions?|outages?|incidents?|hotfix\w*|anrs?|memory leaks?)\b/, 3],
+    [/\b(?:not (?:working|showing|loading|opening|receiving|getting delivered)|debug\w*)\b/, 3],
+    [/\b(root cause|rca|postmortem|fail(?:s|ed|ing|ures?)?|timeouts?|latency|slow|stuck|flaky|leaks?)\b/, 2],
+    [/\b(call drops?|drop(?:ped|ping)? calls?|drops?)\b/, 2],
+    [/\b(investigat\w*|fix(?:es|ed|ing)?|issues?|wrong|mismatch\w*)\b/, 1],
+  ],
+  security: [
+    [/\b(vulnerabilit\w*|pentest\w*|encryption|xss|csrf|2fa|mfa|sso|oauth|rbac)\b/, 3],
+    [/\b(access|permissions?|roles?|security|credentials?|passwords?|secrets?|compliance|audit|auth\w*|read only)\b/, 2],
+    [/\btokens?\b/, 1],
+  ],
+  engineering: [
+    [/\b(architecture|refactor\w*|implement\w*|integrat\w*|api|apis|sdk|endpoints?|webhooks?|schema|migrations?|deploy\w*|infra\w*|database|websockets?|microservices?|codebase|kubernetes|docker)\b/, 3],
+    [/\b(backend|frontend|engineering|engineers?|developers?|technical|code|coding|script|server|cache|queues?|cron|pipeline|ci|cd|notifications?|push|sync|build|release|logs?|tests?|testing|query|sql|index|data model|app|android|ios|repo)\b/, 2],
+    [/\b(ai|llm|model|prompt|audio|video|calls?|calling|voip|events?|setup|set up|config\w*|tool(?:ing)?)\b/, 1],
+  ],
+  people: [
+    [/\b(interview\w*|hiring|hire|candidates?|recruit\w*|resumes?|cv|job description|jd|offer letter|appraisals?|performance review|compensation|salary|salaries|attrition|resignation|notice period)\b/, 3],
+    [/\b(promotion|increment|1 1|one on one|offsite|team building|employee onboarding|new joiners?|hr|headcount|org chart)\b/, 2],
+    [/\b(team|manager)\b/, 1],
+  ],
+  analytics: [
+    [/\b(analytics|funnels?|dashboards?|cohorts?|discrepanc\w*|attribution|kpis?|mau|dau|gmv|arpu|ltv|cac|amplitude|mixpanel|clevertap|metabase|bigquery|looker|tableau|posthog|appsflyer|google analytics|ga4)\b/, 3],
+    [/\b(analys[ie]s|analy[sz]e|metrics?|tracking|reports?|reporting|revenue|retention|churn|conversion|a b test\w*|ab test\w*|experiments?|insights?|forecast\w*|trends?)\b/, 2],
+    [/\b(data|numbers|stats|sql|query|events?)\b/, 1],
+  ],
+  payments: [
+    [/\b(payments?|payouts?|refunds?|upi|mandates?|autopay|auto pay|checkout|cashback|settlements?|reconciliation|chargebacks?|dunning|prenotify|pre notify|payment gateway|emi)\b/, 2],
+    [/\b(subscriptions?|billing|invoices?|wallet|debit|transactions?|gateway|recurring|renewals?|charges?)\b/, 2],
+    [/\b(credit|coupons?|price)\b/, 1],
+  ],
+  product: [
+    [/\b(prd|roadmap|ux|user experience|wireframes?|mockups?|mvp|user research|personas?|ideation|go to market|gtm|feature requests?)\b/, 3],
+    [/\b(features?|ideas?|brainstorm\w*|strategy|positioning|pricing|launch|requirements|spec|proposal|okrs?|q[1-4]|user flows?|onboarding flow|product|sidebar|ui|redesign)\b/, 2],
+    [/\b(plan|planning|improve\w*|design|screens?|page|experience|users?|flow|checklist)\b/, 1],
+  ],
+  writing: [
+    [/\b(emails?|mail|messages?|reply|replies|letters?|heads up|announcement|blog|tweet|caption|proofread\w*|cover letter|speech|essay|article|newsletter|linkedin)\b/, 3],
+    [/\b(draft\w*|rewrite|rephrase|summar(?:y|ies|i[sz]e\w*)|documentation|docs|readme|post|invite|wish(?:es)?|notes|thank you)\b/, 2],
+    [/\b(write|writing|copy|text|words?)\b/, 1],
+  ],
+  // Personal life: outweighs a lone "ideas" or "plan" so a trip or a workout is not "Product".
+  general: [
+    [/\b(trip|travel|itinerary|vacation|holiday|recipes?|cook\w*|workout|gym|diet|fitness|movies?|reading list|gifts?|birthday|wedding|kitchen|renovation|apartment|doctor|kids|homework)\b/, 2],
+    [/\b(books?|home|budget|weekend|family|personal)\b/, 1],
+  ],
+}
+
+/** Tools named in titles that say "this is analytics", not just "this is technical". */
+export const ANALYTICS_TOOLS = new Set(['mixpanel', 'clevertap', 'bigquery', 'metabase'])
+/** Tools that say "this is product work". */
+export const PRODUCT_TOOLS = new Set(['figma', 'notion', 'jira'])

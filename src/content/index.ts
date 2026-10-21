@@ -125,6 +125,7 @@ async function main() {
         rail,
         index: s.index,
         mode: s.settings.timestampMode,
+        timeFormat: s.settings.timeFormat,
         showDates: s.settings.showNativeDates,
         // The launcher is a fallback for a working History+; signed out it would only lead to "needs a session".
         allowLauncher: s.account === 'ready',

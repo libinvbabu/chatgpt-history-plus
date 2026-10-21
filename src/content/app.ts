@@ -10,6 +10,7 @@ import { PACING, newDiagnostics, syncIndex, type Pacing, type SyncDiagnostics, t
 import { emptyIndex, type HistoryIndex, type Settings } from '../history/types'
 import { RelatedEngine } from '../related/engine'
 import { KEYS, type KeyValueStore } from '../storage'
+import { isFilterId, type FilterId } from '../ui/categories'
 import { migrateIndex, migrateSettings } from '../storage/migrations'
 import { navigateToConversation } from './navigation'
 import { createStore, initialState, initialSync, type AppState, type DateFilter, type Store, type SyncState } from './store'
@@ -34,6 +35,7 @@ interface StoredPacing {
 
 interface UiPrefs {
   collapsed?: Record<string, boolean>
+  category?: FilterId
   lastAccountKey?: string
   writer?: string
 }
@@ -113,6 +115,7 @@ export class HistoryApp {
     this.store.set({
       settings: migrateSettings(settings),
       collapsed: sanitizeCollapsed(ui?.collapsed),
+      category: isFilterId(ui?.category) ? ui.category : 'all',
       diagnostics: diagnostics ?? null,
       currentId: conversationIdFromPath(location.pathname),
     })
@@ -388,6 +391,13 @@ export class HistoryApp {
     this.store.set({ dateFilter })
   }
 
+  /** Pick a category chip. Search, date filter and sorting stay as they are. */
+  setCategory(category: FilterId): void {
+    if (category === this.state.category) return
+    this.store.set({ category })
+    this.saveUi()
+  }
+
   setCurrentPath(path: string): void {
     const id = conversationIdFromPath(path)
     if (id !== this.state.currentId) this.store.set({ currentId: id })
@@ -501,7 +511,7 @@ export class HistoryApp {
 
   private writeUi(): void {
     this.uiSaveTimer = undefined
-    const ui: UiPrefs = { collapsed: this.state.collapsed, lastAccountKey: this.lastAccountKey ?? undefined, writer: WRITER_ID }
+    const ui: UiPrefs = { collapsed: this.state.collapsed, category: this.state.category, lastAccountKey: this.lastAccountKey ?? undefined, writer: WRITER_ID }
     void this.deps.kv.set({ [KEYS.ui]: ui }).catch(() => {})
   }
 

@@ -25,6 +25,8 @@ export function migrateIndex(raw: unknown, accountKey: string): HistoryIndex | n
       cachedAt: num(v.cachedAt) ?? 0,
       ...(v.archived === true ? { archived: true } : {}),
       ...(typeof v.gizmoId === 'string' ? { gizmoId: v.gizmoId } : {}),
+      // An explicit category (import or manual choice) outranks the title rules, so it must survive a reload.
+      ...(typeof v.category === 'string' && v.category.length <= 40 ? { category: v.category } : {}),
     }
   }
   return {
@@ -44,6 +46,7 @@ export function migrateSettings(raw: unknown): Settings {
   return {
     timestampMode: r.timestampMode === 'created' ? 'created' : DEFAULT_SETTINGS.timestampMode,
     dateFormat: r.dateFormat === 'absolute' ? 'absolute' : DEFAULT_SETTINGS.dateFormat,
+    timeFormat: r.timeFormat === '24h' || r.timeFormat === '12h' ? r.timeFormat : DEFAULT_SETTINGS.timeFormat,
     grouping: r.grouping === 'month' ? 'month' : DEFAULT_SETTINGS.grouping,
     showNativeDates: typeof r.showNativeDates === 'boolean' ? r.showNativeDates : DEFAULT_SETTINGS.showNativeDates,
   }

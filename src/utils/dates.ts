@@ -74,8 +74,14 @@ export function defaultLocale(): string | undefined {
 // ---------------------------------------------------------------------------
 // Formatting
 
+/** Clock style for times of day: "09:41 PM" or "21:41". */
+export type TimeFormat = '12h' | '24h'
+
 export interface Formatters {
+  /** 24-hour, zero-padded: "21:41". */
   time: Intl.DateTimeFormat
+  /** 12-hour with AM/PM: "09:41 PM". */
+  time12: Intl.DateTimeFormat
   weekdayMonthDay: Intl.DateTimeFormat
   weekdayMonthDayYear: Intl.DateTimeFormat
   monthDay: Intl.DateTimeFormat
@@ -93,8 +99,10 @@ export function formatters(locale?: string): Formatters {
   if (!f) {
     const l = key || undefined
     f = {
-      // 24-hour, zero-padded, in the user's local timezone: "21:41", "00:09". Fixed width, so times align.
+      // Both in the user's local timezone, and both zero-padded so every time in a column is the same width:
+      // "21:41", "00:09"; "09:41 PM", "12:09 AM".
       time: new Intl.DateTimeFormat(l, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }),
+      time12: new Intl.DateTimeFormat(l, { hour: '2-digit', minute: '2-digit', hour12: true }),
       weekdayMonthDay: new Intl.DateTimeFormat(l, { weekday: 'short', month: 'short', day: 'numeric' }),
       weekdayMonthDayYear: new Intl.DateTimeFormat(l, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
       monthDay: new Intl.DateTimeFormat(l, { month: 'short', day: 'numeric' }),
@@ -110,6 +118,12 @@ export function formatters(locale?: string): Formatters {
 
 export type DateStyle = 'relative' | 'absolute'
 
+/** The time-of-day formatter for a clock style. */
+export function timeOf(ts: number, timeFormat: TimeFormat, locale?: string): string {
+  const f = formatters(locale)
+  return (timeFormat === '24h' ? f.time : f.time12).format(ts)
+}
+
 /** "Sep 21 – 26", "Aug 31 – Sep 6", "Dec 28, 2025 – Jan 3, 2026". Both ends inclusive. */
 export function formatDayRange(first: Date, last: Date, now: Date, locale?: string): string {
   const f = formatters(locale)
@@ -121,32 +135,31 @@ export function formatDayRange(first: Date, last: Date, now: Date, locale?: stri
 }
 
 /** Full date + time, used in tooltips and absolute mode: "Sep 12, 2026, 3:42 PM". */
-export function formatFull(ts: number, locale?: string): string {
-  const f = formatters(locale)
-  return `${f.monthDayYear.format(ts)} · ${f.time.format(ts)}`
+export function formatFull(ts: number, locale?: string, timeFormat: TimeFormat = '12h'): string {
+  return `${formatters(locale).monthDayYear.format(ts)} · ${timeOf(ts, timeFormat, locale)}`
 }
 
-/** "Oct 14 · 21:41", with the year when it is not the current one: the compact date + time used where no header names the day. */
-export function formatDateTime(ts: number, now: Date, locale?: string): string {
+/** "Oct 14 · 09:41 PM", with the year when it is not the current one: the compact date + time used where no header names the day. */
+export function formatDateTime(ts: number, now: Date, locale?: string, timeFormat: TimeFormat = '12h'): string {
   const f = formatters(locale)
   const date = new Date(ts).getFullYear() === now.getFullYear() ? f.monthDay : f.monthDayYear
-  return `${date.format(ts)} · ${f.time.format(ts)}`
+  return `${date.format(ts)} · ${timeOf(ts, timeFormat, locale)}`
 }
 
 /**
  * The time on the right of a conversation row. Rows under a header or divider
- * that already names the day only need a time ("21:41"); others carry a compact
- * date as well ("Oct 14 · 21:41"). Absolute mode always shows both, in full.
+ * that already names the day only need a time ("09:41 PM"); others carry a compact
+ * date as well ("Oct 14 · 09:41 PM"). Absolute mode always shows both, in full.
  */
-export function formatRowTime(ts: number, timeOnly: boolean, style: DateStyle, now: Date, locale?: string): string {
-  if (style === 'absolute') return formatFull(ts, locale)
-  return timeOnly ? formatters(locale).time.format(ts) : formatDateTime(ts, now, locale)
+export function formatRowTime(ts: number, timeOnly: boolean, style: DateStyle, now: Date, locale?: string, timeFormat: TimeFormat = '12h'): string {
+  if (style === 'absolute') return formatFull(ts, locale, timeFormat)
+  return timeOnly ? timeOf(ts, timeFormat, locale) : formatDateTime(ts, now, locale, timeFormat)
 }
 
-/** Compact label for the native ChatGPT sidebar: "10:05", "Sep 24", "Dec 2025". */
-export function formatCompact(ts: number, now: Date, locale?: string): string {
+/** Compact label for the native ChatGPT sidebar: "10:05 AM", "Sep 24", "Dec 2025". */
+export function formatCompact(ts: number, now: Date, locale?: string, timeFormat: TimeFormat = '12h'): string {
   const f = formatters(locale)
-  if (isSameDay(ts, now)) return f.time.format(ts)
+  if (isSameDay(ts, now)) return timeOf(ts, timeFormat, locale)
   if (new Date(ts).getFullYear() === now.getFullYear()) return f.monthDay.format(ts)
   return f.monthShortYear.format(ts)
 }

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { DateFilter } from '../content/store'
 import type { Entry } from '../history/grouping'
 import { formatters } from '../utils/dates'
 import { PRESETS } from './view'
-import { CalendarIcon, CheckIcon, ChevronIcon } from './icons'
+import { CheckIcon, ChevronIcon } from './icons'
 
 interface Props {
   value: DateFilter | null
@@ -16,7 +16,8 @@ interface Props {
 
 const RECENT_MONTHS = 18
 
-export function DateFilterMenu({ value, label, sorted, now, locale, onChange }: Props) {
+/** Open state for a toolbar menu: closes on a click elsewhere (in the panel or on the page) and focuses its first item. */
+export function usePopover() {
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLDivElement>(null)
 
@@ -39,6 +40,19 @@ export function DateFilterMenu({ value, label, sorted, now, locale, onChange }: 
     }
   }, [open])
 
+  /** Escape closes the menu (and only the menu) and returns focus to its button. */
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && open) {
+      e.stopPropagation()
+      setOpen(false)
+      anchor.current?.querySelector<HTMLElement>('.chip')?.focus()
+    }
+  }
+  return { open, setOpen, anchor, onKeyDown }
+}
+
+export function DateFilterMenu({ value, label, sorted, now, locale, onChange }: Props) {
+  const { open, setOpen, anchor, onKeyDown } = usePopover()
   const periods = useMemo(() => (open ? countPeriods(sorted, now) : null), [open, sorted, now])
   const f = formatters(locale)
 
@@ -49,19 +63,8 @@ export function DateFilterMenu({ value, label, sorted, now, locale, onChange }: 
   const is = (v: DateFilter) => JSON.stringify(v) === JSON.stringify(value)
 
   return (
-    <div
-      className="popover-anchor"
-      ref={anchor}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape' && open) {
-          e.stopPropagation()
-          setOpen(false)
-          anchor.current?.querySelector<HTMLElement>('.chip')?.focus()
-        }
-      }}
-    >
-      <button type="button" className="chip" data-on={!!value} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} title={label ?? 'Filter by date'}>
-        <CalendarIcon />
+    <div className="popover-anchor date-anchor" ref={anchor} onKeyDown={onKeyDown}>
+      <button type="button" className="chip date-chip" data-on={!!value} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} title={label ?? 'Filter by date'}>
         <span className="chip-label">{value ? label : 'All dates'}</span>
         <ChevronIcon size={12} />
       </button>
@@ -108,7 +111,7 @@ export function DateFilterMenu({ value, label, sorted, now, locale, onChange }: 
   )
 }
 
-function Item({ checked, count, onClick, children }: { checked: boolean; count?: number; onClick(): void; children: ReactNode }) {
+export function Item({ checked, count, onClick, children }: { checked: boolean; count?: number; onClick(): void; children: ReactNode }) {
   return (
     <button type="button" className="item" role="menuitemradio" aria-checked={checked} onClick={onClick}>
       <span className="check">{checked && <CheckIcon />}</span>

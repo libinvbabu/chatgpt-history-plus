@@ -3,6 +3,7 @@
 // that make two conversations about the same *thing* rather than the same *kind
 // of thing*: PRs, repositories, tickets, providers, tools, topics, activity.
 
+import { categorize } from './categorize'
 import { ACTIVITY_RULES, CATEGORY_LABELS, TOPICS, entityMatcher, type Activity, type CategoryId, type EntityType } from './dictionary'
 import { stem, tokenize, isGeneric } from './text'
 
@@ -85,21 +86,6 @@ export function extractEntities(text: string): Entity[] {
   return [...found.values()]
 }
 
-function classify(activity: Activity | null, topics: readonly string[], entities: readonly Entity[]): CategoryId {
-  const has = (...t: string[]) => t.some((x) => topics.includes(x))
-  const ent = (type: EntityType) => entities.some((e) => e.type === type)
-  if (activity === 'code_review') return 'code-review'
-  if (activity === 'debugging' || has('incidents')) return 'debugging'
-  if (has('payments', 'subscriptions') || ent('provider')) return 'payments'
-  if (has('access-control', 'security')) return 'security'
-  if (activity === 'analytics' || has('analytics')) return 'analytics'
-  if (activity === 'hiring' || has('hiring')) return 'people'
-  if (ent('tech') || ent('repo') || has('database', 'infrastructure', 'api', 'architecture', 'mobile')) return 'engineering'
-  if (activity === 'planning' || has('roadmap')) return 'product'
-  if (activity === 'writing' || has('email')) return 'writing'
-  return 'general'
-}
-
 export function extract(text: string): Extracted {
   const entities = extractEntities(text)
   // URLs are entities already; their path fragments are noise as words.
@@ -133,7 +119,7 @@ export function extract(text: string): Extracted {
     entities,
     topics: uniqueTopics,
     activity,
-    category: classify(activity, uniqueTopics, entities),
+    category: categorize(text, entities),
     stems,
     bigrams: [...new Set(bigrams)],
     keywords: stems.filter((s) => !isGeneric(s)),
@@ -157,7 +143,8 @@ export function categoryForTitle(title: string): CategoryId {
 
 export const categoryLabel = (c: CategoryId): string => CATEGORY_LABELS[c]
 
-export const isCategoryId = (v: unknown): v is CategoryId => typeof v === 'string' && v in CATEGORY_LABELS
+// Own keys only: `in` would accept "toString" and friends from the prototype chain.
+export const isCategoryId = (v: unknown): v is CategoryId => typeof v === 'string' && Object.hasOwn(CATEGORY_LABELS, v)
 
 /** A stored category if something supplied a valid one, else the title rules. One place to change. */
 export function categoryFor(conv: { title: string; category?: string | null }): CategoryId {

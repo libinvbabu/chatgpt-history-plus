@@ -2,17 +2,20 @@ import { Component, useCallback, useEffect, useMemo, useRef, useState, useSyncEx
 import type { HistoryApp } from '../content/app'
 import type { AppState } from '../content/store'
 import type { GroupRow, RelatedHeaderRow, RelatedMoreRow, Row } from '../history/grouping'
-import { isMac } from '../shared/platform'
+import { isMac, SHORTCUT_LABEL } from '../shared/platform'
 import { formatRelativeAgo, getWeekStartsOn } from '../utils/dates'
+import { filterDef } from './categories'
+import { CategoryFilters } from './CategoryFilters'
 import { DateFilterMenu } from './DateFilterMenu'
 import { EmptyState, Skeleton } from './EmptyState'
-import { AlertIcon, BackIcon, CloseIcon, GearIcon, HistoryIcon, LockIcon, SearchIcon, SyncIcon } from './icons'
+import { AlertIcon, BackIcon, CloseIcon, HistoryIcon, LockIcon, SearchIcon, SlidersIcon, SyncIcon } from './icons'
 import { RelatedHeader, RelatedItem, RelatedMore } from './RelatedSection'
 import { ConversationItem, Divider, GroupHeader } from './Rows'
 import { useRelated } from './related'
 import { SettingsView } from './Settings'
+import { SortMenu } from './SortMenu'
 import { ERROR_COPY, StatusBar } from './StatusBar'
-import { VirtualList } from './VirtualList'
+import { gapAbove, ruleAbove, VirtualList } from './VirtualList'
 import { useDateContext, useHistoryView } from './view'
 
 const LIST_ID = 'chp-list'
@@ -88,7 +91,7 @@ function HistoryPanel({ app, state, closing }: { app: HistoryApp; state: AppStat
     const first = view.filtering ? rowsRef.current.find((r) => r.type === 'conversation') : undefined
     setActiveKey(first?.key ?? null)
     if (first) setReveal((r) => r + 1)
-  }, [state.query, state.literal, state.dateFilter, view.filtering])
+  }, [state.query, state.literal, state.dateFilter, state.category, view.filtering])
 
   useEffect(() => {
     if (!toast) return
@@ -227,7 +230,7 @@ function HistoryPanel({ app, state, closing }: { app: HistoryApp; state: AppStat
               <SyncIcon />
             </button>
             <button className="icon-btn" onClick={() => app.setView('settings')} aria-label="Settings" title="Settings">
-              <GearIcon />
+              <SlidersIcon />
             </button>
             <button className="icon-btn" onClick={() => app.close()} aria-label="Close History+" title="Close (esc)">
               <CloseIcon />
@@ -235,7 +238,7 @@ function HistoryPanel({ app, state, closing }: { app: HistoryApp; state: AppStat
           </div>
 
           <label className="search">
-            <SearchIcon />
+            <SearchIcon size={15} />
             <span className="sr-only">Search conversations</span>
             <input
               ref={inputRef}
@@ -245,32 +248,32 @@ function HistoryPanel({ app, state, closing }: { app: HistoryApp; state: AppStat
               aria-controls={LIST_ID}
               aria-activedescendant={activeIndex >= 0 ? rowId(activeIndex) : undefined}
               aria-autocomplete="list"
-              placeholder="Search titles, or try “last week”"
+              placeholder="Search your conversations…"
               value={state.query}
               spellCheck={false}
               autoComplete="off"
               onChange={(e) => app.setQuery(e.target.value)}
               onKeyDown={onSearchKey}
             />
-            {state.query && (
+            {state.query ? (
               <button type="button" className="clear" aria-label="Clear search" onClick={() => (app.setQuery(''), inputRef.current?.focus())}>
                 <CloseIcon size={14} />
               </button>
+            ) : (
+              <kbd className="search-key" title="Open History+ from anywhere on ChatGPT. Try “last week” or “in:aug” to search by date.">
+                {SHORTCUT_LABEL}
+              </kbd>
             )}
           </label>
 
+          <CategoryFilters value={state.category} counts={view.categoryCounts} onChange={(id) => app.setCategory(id)} />
+
           <div className="toolbar">
-            <div className="segmented" role="group" aria-label="Date shown">
-              <button type="button" aria-pressed={state.settings.timestampMode === 'updated'} onClick={() => void app.updateSettings({ timestampMode: 'updated' })}>
-                Last active
-              </button>
-              <button type="button" aria-pressed={state.settings.timestampMode === 'created'} onClick={() => void app.updateSettings({ timestampMode: 'created' })}>
-                Created
-              </button>
-            </div>
+            <SortMenu value={state.settings.timestampMode} onChange={(timestampMode) => void app.updateSettings({ timestampMode })} />
             <DateFilterMenu value={state.dateFilter} label={view.filterRange?.label ?? null} sorted={view.sorted} now={now} locale={locale} onChange={(v) => app.setDateFilter(v)} />
-            <span className="count" aria-live="polite">
-              {view.filtering ? `${view.matchCount.toLocaleString()} of ${count.toLocaleString()}` : count ? `${count.toLocaleString()}` : ''}
+            <span className="count-wrap" aria-live="polite">
+              <span className="count">{view.narrowed ? `${view.matchCount.toLocaleString()} of ${count.toLocaleString()}` : count ? `${count.toLocaleString()}` : ''}</span>
+              {!view.narrowed && count > 0 && (count === 1 ? ' chat' : ' chats')}
             </span>
           </div>
 
@@ -431,6 +434,7 @@ function ListArea({ app, state, view, now, activeIndex, reveal, onToggle, onTogg
   }
   if (rows.length === 0) {
     const hasDate = parsed.ranges.length > 0 || state.dateFilter
+    const categoryOnly = state.category !== 'all' && !state.query && !hasDate
     return (
       <EmptyState
         icon={<SearchIcon size={20} />}
@@ -452,15 +456,22 @@ function ListArea({ app, state, view, now, activeIndex, reveal, onToggle, onTogg
                 Clear search
               </button>
             )}
+            {state.category !== 'all' && (
+              <button className="btn" onClick={() => app.setCategory('all')}>
+                Show all categories
+              </button>
+            )}
           </>
         }
       >
-        {hasDate ? 'Nothing in that period matches. ' : ''}Search looks at titles only{index.backfillComplete ? '.' : ', and history is still syncing.'}
+        {categoryOnly
+          ? `No conversations are filed under ${filterDef(state.category).label}${index.backfillComplete ? '.' : ' yet, and history is still syncing.'}`
+          : `${hasDate ? 'Nothing in that period matches. ' : ''}${state.category !== 'all' ? `Only ${filterDef(state.category).label} is showing. ` : ''}Search looks at titles only${index.backfillComplete ? '.' : ', and history is still syncing.'}`}
       </EmptyState>
     )
   }
 
-  const dateStyle = state.settings.dateFormat
+  const { dateFormat: dateStyle, timeFormat } = state.settings
   return (
     <VirtualList
       id={LIST_ID}
@@ -474,15 +485,15 @@ function ListArea({ app, state, view, now, activeIndex, reveal, onToggle, onTogg
       renderRow={(row, i) => {
         switch (row.type) {
           case 'group':
-            return <GroupHeader row={row} id={rowId(i)} onToggle={onToggle} />
+            return <GroupHeader row={row} id={rowId(i)} gap={gapAbove(row, view.rows[i - 1])} rule={ruleAbove(row, view.rows[i - 1])} onToggle={onToggle} />
           case 'divider':
             return <Divider row={row} />
           case 'related-header':
-            return <RelatedHeader row={row} id={rowId(i)} onToggle={onToggleRelated} />
+            return <RelatedHeader row={row} id={rowId(i)} gap={gapAbove(row, view.rows[i - 1])} onToggle={onToggleRelated} />
           case 'related-more':
             return <RelatedMore row={row} id={rowId(i)} onToggle={onToggleRelated} />
           case 'related':
-            return <RelatedItem row={row} id={rowId(i)} now={now} dateStyle={dateStyle} locale={locale} current={row.entry.conv.id === state.currentId} onOpen={onOpen} />
+            return <RelatedItem row={row} id={rowId(i)} now={now} dateStyle={dateStyle} timeFormat={timeFormat} locale={locale} current={row.entry.conv.id === state.currentId} onOpen={onOpen} />
           default:
             return (
               <ConversationItem
@@ -490,6 +501,7 @@ function ListArea({ app, state, view, now, activeIndex, reveal, onToggle, onTogg
                 id={rowId(i)}
                 now={now}
                 dateStyle={dateStyle}
+                timeFormat={timeFormat}
                 locale={locale}
                 terms={parsed.terms}
                 current={row.entry.conv.id === state.currentId}

@@ -1,17 +1,17 @@
-import { memo, type ReactNode } from 'react'
+import { memo, type CSSProperties, type ReactNode } from 'react'
 import type { ConversationRow, DividerRow, GroupRow } from '../history/grouping'
 import { highlightRanges, type SearchTerm } from '../history/search'
 import type { StoredConversation } from '../history/types'
-import { categoryFor } from '../related/extract'
-import { formatFull, formatRowTime, type DateStyle } from '../utils/dates'
+import { formatFull, formatRowTime, type DateStyle, type TimeFormat } from '../utils/dates'
 import { CategoryIcon } from './CategoryIcon'
 import { ChevronIcon } from './icons'
 
-/** Section header: `▸ TITLE  count ………… date`. Today is always open, so it has no chevron and no click. */
-export const GroupHeader = memo(function GroupHeader({ row, id, onToggle }: { row: GroupRow; id?: string; onToggle(row: GroupRow): void }) {
+/** Section header: `▸ TITLE  count ………… date`. Today is always open, so it has no chevron and no click, and sits flush left. */
+export const GroupHeader = memo(function GroupHeader({ row, id, gap = 0, rule, onToggle }: { row: GroupRow; id?: string; gap?: number; rule?: boolean; onToggle(row: GroupRow): void }) {
+  const style = gapStyle(gap)
   const content = (
     <>
-      {row.collapsible ? <ChevronIcon /> : <span className="chev-spacer" aria-hidden="true" />}
+      {row.collapsible && <ChevronIcon />}
       <span className="label">{row.label}</span>
       <span className="n">{row.count.toLocaleString()}</span>
       {row.sublabel && <span className="sublabel">{row.sublabel}</span>}
@@ -19,7 +19,7 @@ export const GroupHeader = memo(function GroupHeader({ row, id, onToggle }: { ro
   )
   if (!row.collapsible) {
     return (
-      <div id={id} className="group static" role="treeitem" aria-level={row.level + 1} data-level={row.level}>
+      <div id={id} className="group static" role="treeitem" aria-level={row.level + 1} data-level={row.level} data-rule={rule || undefined} style={style}>
         {content}
       </div>
     )
@@ -33,6 +33,8 @@ export const GroupHeader = memo(function GroupHeader({ row, id, onToggle }: { ro
       aria-level={row.level + 1}
       aria-expanded={row.expanded}
       data-level={row.level}
+      data-rule={rule || undefined}
+      style={style}
       tabIndex={-1}
       onClick={() => onToggle(row)}
     >
@@ -40,6 +42,9 @@ export const GroupHeader = memo(function GroupHeader({ row, id, onToggle }: { ro
     </button>
   )
 })
+
+/** The gap above a header is part of its row; the header itself starts below it. */
+export const gapStyle = (gap: number): CSSProperties | undefined => (gap ? ({ '--gap': `${gap}px` } as CSSProperties) : undefined)
 
 export function Divider({ row }: { row: DividerRow }) {
   return (
@@ -86,7 +91,7 @@ export const ConversationLink = memo(function ConversationLink({ conv, id, ariaL
         onOpen(conv.id)
       }}
     >
-      <CategoryIcon category={categoryFor(conv)} />
+      <CategoryIcon conv={conv} />
       <span className={conv.title ? 'title' : 'title untitled'}>{conv.title && terms ? highlight(title, terms) : title}</span>
       <span className="meta">
         {conv.archived && <span className="badge">Archived</span>}
@@ -97,9 +102,9 @@ export const ConversationLink = memo(function ConversationLink({ conv, id, ariaL
 })
 
 /** The hover text: full title, both timestamps, and (for related rows) why it matched. */
-export function conversationTooltip(conv: StoredConversation, locale?: string, reason?: string): string {
+export function conversationTooltip(conv: StoredConversation, locale?: string, reason?: string, timeFormat?: TimeFormat): string {
   const title = conv.title || 'Untitled conversation'
-  const lines = [title, `Created: ${conv.createdAt ? formatFull(conv.createdAt, locale) : '—'}`, `Last active: ${conv.updatedAt ? formatFull(conv.updatedAt, locale) : '—'}`]
+  const lines = [title, `Created: ${conv.createdAt ? formatFull(conv.createdAt, locale, timeFormat) : '—'}`, `Last active: ${conv.updatedAt ? formatFull(conv.updatedAt, locale, timeFormat) : '—'}`]
   if (reason) lines.push('', `Related: ${reason}`)
   return lines.join('\n')
 }
@@ -109,15 +114,16 @@ interface ConversationProps {
   id: string
   now: Date
   dateStyle: DateStyle
+  timeFormat: TimeFormat
   locale?: string
   terms: readonly SearchTerm[]
   current: boolean
   onOpen(id: string): void
 }
 
-export const ConversationItem = memo(function ConversationItem({ row, id, now, dateStyle, locale, terms, current, onOpen }: ConversationProps) {
+export const ConversationItem = memo(function ConversationItem({ row, id, now, dateStyle, timeFormat, locale, terms, current, onOpen }: ConversationProps) {
   const { conv, ts } = row.entry
-  const when = ts == null ? 'No date' : formatRowTime(ts, row.timeOnly, dateStyle, now, locale)
+  const when = ts == null ? 'No date' : formatRowTime(ts, row.timeOnly, dateStyle, now, locale, timeFormat)
   return (
     <ConversationLink
       conv={conv}
@@ -125,7 +131,7 @@ export const ConversationItem = memo(function ConversationItem({ row, id, now, d
       ariaLevel={row.level + 2}
       level={row.level}
       when={when}
-      tooltip={conversationTooltip(conv, locale)}
+      tooltip={conversationTooltip(conv, locale, undefined, timeFormat)}
       terms={terms}
       current={current}
       onOpen={onOpen}

@@ -36,7 +36,7 @@ describe('local timezone', () => {
     expect(groupOf('America/Los_Angeles')).toBe('yesterday')
   })
 
-  it('shows times in the viewer’s timezone, 24-hour', async () => {
+  it('shows times in the viewer’s timezone', async () => {
     // Formatters are cached with the zone they were created in, so load a fresh copy per zone.
     const inZone = async (tz: string) => {
       if (!useZone(tz)) return null
@@ -45,10 +45,12 @@ describe('local timezone', () => {
     }
     const ist = await inZone('Asia/Kolkata')
     if (!ist) return
-    expect(ist.formatRowTime(CHAT, true, 'relative', new Date(NOW), 'en-US')).toBe('08:30')
-    expect(ist.formatDateTime(CHAT, new Date(NOW), 'en-US')).toBe('Oct 16 · 08:30')
+    expect(ist.formatRowTime(CHAT, true, 'relative', new Date(NOW), 'en-US', '24h')).toBe('08:30')
+    expect(ist.formatDateTime(CHAT, new Date(NOW), 'en-US', '24h')).toBe('Oct 16 · 08:30')
+    expect(ist.formatRowTime(CHAT, true, 'relative', new Date(NOW), 'en-US', '12h').replace(/\u202f/g, ' ')).toBe('08:30 AM')
     const la = await inZone('America/Los_Angeles')
-    expect(la!.formatRowTime(CHAT, true, 'relative', new Date(NOW), 'en-US')).toBe('20:00')
-    expect(la!.formatDateTime(CHAT, new Date(NOW), 'en-US')).toBe('Oct 15 · 20:00')
+    expect(la!.formatRowTime(CHAT, true, 'relative', new Date(NOW), 'en-US', '24h')).toBe('20:00')
+    expect(la!.formatDateTime(CHAT, new Date(NOW), 'en-US', '24h')).toBe('Oct 15 · 20:00')
+    expect(la!.formatRowTime(CHAT, true, 'relative', new Date(NOW), 'en-US', '12h').replace(/\u202f/g, ' ')).toBe('08:00 PM')
   })
 })

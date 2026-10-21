@@ -1,3 +1,5 @@
+import type { TimeFormat } from '../utils/dates'
+
 export interface ConversationMetadata {
   id: string
   /** Empty string when ChatGPT has not generated a title. */
@@ -34,9 +36,12 @@ export interface HistoryIndex {
 
 export type TimestampMode = 'updated' | 'created'
 
+export type { TimeFormat }
+
 export interface Settings {
   timestampMode: TimestampMode
   dateFormat: 'relative' | 'absolute'
+  timeFormat: TimeFormat
   grouping: 'smart' | 'month'
   showNativeDates: boolean
 }
@@ -44,6 +49,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   timestampMode: 'updated',
   dateFormat: 'relative',
+  timeFormat: '12h',
   grouping: 'smart',
   showNativeDates: true,
 }

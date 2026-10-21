@@ -59,5 +59,8 @@ describe('category lookup', () => {
     expect(categoryFor({ title: 'Review Paytm Autopay PR', category: null })).toBe('code-review')
     expect(categoryFor({ title: 'Review Paytm Autopay PR', category: 'not-a-category' })).toBe('code-review')
     expect(categoryFor({ title: 'Weekend trip' })).toBe('general')
+    // Names that exist on every object are not categories.
+    expect(categoryFor({ title: 'Weekend trip', category: 'toString' })).toBe('general')
+    expect(categoryFor({ title: 'Weekend trip', category: 'constructor' })).toBe('general')
   })
 })

@@ -23,13 +23,19 @@ export function SettingsView({ app, state, onToast }: { app: HistoryApp; state: 
 
       <section>
         <h4>Date format</h4>
-        <Radio name="fmt" checked={settings.dateFormat === 'relative'} onChange={() => set({ dateFormat: 'relative' })} title="Smart" desc="10:05 AM · Thu, Sep 18 · Dec 14, 2025" />
-        <Radio name="fmt" checked={settings.dateFormat === 'absolute'} onChange={() => set({ dateFormat: 'absolute' })} title="Absolute" desc="Sep 18, 2026 · 3:42 PM" />
+        <Radio name="fmt" checked={settings.dateFormat === 'relative'} onChange={() => set({ dateFormat: 'relative' })} title="Smart" desc="Just the time under a day heading, a short date elsewhere" />
+        <Radio name="fmt" checked={settings.dateFormat === 'absolute'} onChange={() => set({ dateFormat: 'absolute' })} title="Absolute" desc="Always the full date and time" />
+      </section>
+
+      <section>
+        <h4>Time format</h4>
+        <Radio name="clock" checked={settings.timeFormat === '12h'} onChange={() => set({ timeFormat: '12h' })} title="12-hour" desc="09:41 PM" />
+        <Radio name="clock" checked={settings.timeFormat === '24h'} onChange={() => set({ timeFormat: '24h' })} title="24-hour" desc="21:41" />
       </section>
 
       <section>
         <h4>Grouping</h4>
-        <Radio name="grp" checked={settings.grouping === 'smart'} onChange={() => set({ grouping: 'smart' })} title="Smart" desc="Today, yesterday, this week, last week, then months and years" />
+        <Radio name="grp" checked={settings.grouping === 'smart'} onChange={() => set({ grouping: 'smart' })} title="Smart" desc="Today, yesterday, this week, last week, then older conversations by month" />
         <Radio name="grp" checked={settings.grouping === 'month'} onChange={() => set({ grouping: 'month' })} title="By month" desc="Every month as its own group" />
       </section>
 
@@ -53,7 +59,7 @@ export function SettingsView({ app, state, onToast }: { app: HistoryApp; state: 
             {index?.totalReported != null && index.totalReported !== count ? ` (ChatGPT reports ${index.totalReported.toLocaleString()})` : ''}
           </dd>
           <dt>Last sync</dt>
-          <dd title={index?.lastIncrementalSyncAt ? formatFull(index.lastIncrementalSyncAt) : undefined}>
+          <dd title={index?.lastIncrementalSyncAt ? formatFull(index.lastIncrementalSyncAt, undefined, settings.timeFormat) : undefined}>
             {sync.running ? 'Syncing now…' : index?.lastIncrementalSyncAt ? formatRelativeAgo(index.lastIncrementalSyncAt, now) : 'Never'}
           </dd>
           <dt>Last full sync</dt>

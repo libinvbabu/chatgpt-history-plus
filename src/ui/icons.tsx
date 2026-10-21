@@ -35,10 +35,12 @@ export const CloseIcon = ({ size = 16, ...p }: P) => (
   </svg>
 )
 
-export const GearIcon = ({ size = 17, ...p }: P) => (
+/** Settings: three sliders. */
+export const SlidersIcon = ({ size = 16, ...p }: P) => (
   <svg {...base(size)} {...p}>
-    <path d="M8.6 2.9h2.8l.4 2 1.4.8 1.9-.7 1.4 2.4-1.5 1.4v1.6l1.5 1.4-1.4 2.4-1.9-.7-1.4.8-.4 2H8.6l-.4-2-1.4-.8-1.9.7-1.4-2.4L5 10.8V9.2L3.5 7.8l1.4-2.4 1.9.7 1.4-.8.4-2Z" />
-    <circle cx="10" cy="10" r="2.3" />
+    <path d="M3.5 6h6M13.5 6h3M3.5 14h3M10.5 14h6" />
+    <circle cx="11.5" cy="6" r="2" />
+    <circle cx="8.5" cy="14" r="2" />
   </svg>
 )
 
@@ -52,13 +54,6 @@ export const SyncIcon = ({ size = 16, ...p }: P) => (
 export const ChevronIcon = ({ size = 14, ...p }: P) => (
   <svg {...base(size)} {...p} className={`chev ${p.className ?? ''}`}>
     <path d="m6 8 4 4 4-4" />
-  </svg>
-)
-
-export const CalendarIcon = ({ size = 14, ...p }: P) => (
-  <svg {...base(size)} {...p}>
-    <rect x="3.2" y="4.2" width="13.6" height="12.6" rx="2.2" />
-    <path d="M3.2 8.2h13.6M7 2.6v3M13 2.6v3" />
   </svg>
 )
 
@@ -85,14 +80,5 @@ export const AlertIcon = ({ size = 20, ...p }: P) => (
   <svg {...base(size)} {...p}>
     <path d="M10 3.2 17.4 16H2.6L10 3.2Z" />
     <path d="M10 8.2v3.4M10 13.9v.1" />
-  </svg>
-)
-
-/** Two linked chats: the "related" relationship. */
-export const RelatedIcon = ({ size = 14, ...p }: P) => (
-  <svg {...base(size)} {...p} viewBox="0 0 24 24" strokeWidth={2}>
-    <path d="M9 17H7A5 5 0 0 1 7 7h2" />
-    <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
-    <path d="M8 12h8" />
   </svg>
 )

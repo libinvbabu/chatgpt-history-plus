@@ -22,6 +22,8 @@
   --accent: #3e63dd;
   --accent-soft: rgba(62, 99, 221, 0.1);
   --accent-fg: #2f4fb8;
+  /* Conversation titles: a step below full text colour, so the list reads calmly. */
+  --fg-title: color-mix(in srgb, var(--fg) 88%, var(--bg));
   --mark: rgba(255, 196, 0, 0.38);
   --warn: #a15c00;
   --danger: #c4312b;
@@ -105,7 +107,7 @@ svg {
   top: 0;
   bottom: 0;
   left: var(--chp-left, 0px);
-  width: 400px;
+  width: 380px;
   max-width: calc(100vw - var(--chp-left, 0px));
   display: flex;
   flex-direction: column;
@@ -151,6 +153,10 @@ svg {
   .panel {
     width: calc(100vw - var(--chp-left, 0px));
   }
+  /* The placeholder needs the room more than the shortcut hint does. */
+  .search .search-key {
+    display: none;
+  }
 }
 
 .header {
@@ -158,15 +164,15 @@ svg {
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 52px;
-  padding: 0 8px 0 16px;
+  height: 54px;
+  padding: 0 10px 0 16px;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 15px;
+  gap: 9px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -187,8 +193,8 @@ svg {
 .icon-btn {
   display: inline-grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
   color: var(--fg-muted);
 }
@@ -210,24 +216,31 @@ svg {
 
 /* --------------------------------------------------------------- search */
 
+/* The primary control: a softly filled field, with the shortcut on the right until you type. */
 .search {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
-  margin: 0 12px;
-  padding: 0 8px 0 11px;
-  border-radius: 9px;
+  gap: 9px;
+  height: 40px;
+  margin: 0 16px;
+  padding: 0 8px 0 12px;
+  border-radius: 10px;
   background: var(--bg-input);
   border: 1px solid transparent;
   color: var(--fg-subtle);
-  transition: border-color 0.12s, background 0.12s;
+  transition: border-color 0.12s, box-shadow 0.12s, background-color 0.12s;
+}
+
+.search:hover {
+  border-color: var(--border);
 }
 
 .search:focus-within {
-  border-color: var(--border-strong);
   background: var(--bg);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  color: var(--fg-muted);
 }
 
 .search input {
@@ -245,6 +258,19 @@ svg {
   color: var(--fg-subtle);
 }
 
+.search .search-key {
+  margin: 0;
+  border: 0;
+  padding: 0 2px;
+  font-size: 11.5px;
+  color: var(--fg-subtle);
+  letter-spacing: 0.02em;
+}
+
+.search:focus-within .search-key {
+  display: none;
+}
+
 .search .clear {
   display: inline-grid;
   place-items: center;
@@ -259,65 +285,132 @@ svg {
   color: var(--fg);
 }
 
+/* ------------------------------------------------------- category filters */
+
+/* One row of pills that scrolls sideways: never wraps, no scrollbar. An edge fades while more lies beyond it. */
+.cats {
+  flex: none;
+  margin-top: 12px;
+}
+
+.cats-scroll {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  position: relative;
+  display: flex;
+  gap: 6px;
+  padding: 0 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* A sideways swipe that reaches the end stops here, instead of becoming browser back/forward. */
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+}
+
+.cats-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.cats[data-fade-start] .cats-scroll {
+  --fade-start: 24px;
+}
+
+.cats[data-fade-end] .cats-scroll {
+  --fade-end: 40px;
+}
+
+.cat-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px 0 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  line-height: 1;
+  color: var(--fg-subtle);
+  white-space: nowrap;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.cat-chip:hover {
+  background: var(--hover);
+  color: var(--fg-muted);
+}
+
+/* Selected: a soft blue-grey, clearly the one that is on, without shouting. */
+.cat-chip[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--fg);
+  font-weight: 500;
+}
+
+/* Nothing in this category for the current search: still pickable, just quieter. */
+.cat-chip[data-empty]:not([aria-pressed='true']) {
+  opacity: 0.55;
+}
+
+.cat-chip:focus-visible {
+  outline-offset: -2px;
+}
+
 /* -------------------------------------------------------------- toolbar */
 
+/* Sort, dates, count: plain text menus, then a rule that separates the controls from the history. */
 .toolbar {
   position: relative;
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px 6px;
+  gap: 4px;
+  margin: 12px 16px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
 }
 
-.segmented {
-  display: inline-flex;
-  padding: 2px;
-  border-radius: 8px;
-  background: var(--bg-input);
+.toolbar .popover-anchor {
+  min-width: 0;
 }
 
-.segmented button {
-  height: 24px;
-  padding: 0 9px;
-  border-radius: 6px;
-  font-size: 12.5px;
-  color: var(--fg-muted);
-  white-space: nowrap;
-}
-
-.segmented button:hover {
-  color: var(--fg);
-}
-
-.segmented button[aria-pressed='true'] {
-  background: var(--bg);
-  color: var(--fg);
-  font-weight: 500;
-  box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgba(0, 0, 0, 0.06);
+/* Dates in the middle, as a label of its own; it gives way first when space is short. */
+.toolbar .date-anchor {
+  margin-left: auto;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 8px 0 9px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  gap: 4px;
+  height: 26px;
+  padding: 0 6px;
+  margin-left: -6px;
+  border-radius: 6px;
   font-size: 12.5px;
   color: var(--fg-muted);
   white-space: nowrap;
-  max-width: 170px;
+  min-width: 0;
+  max-width: 160px;
+  transition: background-color 0.12s, color 0.12s;
 }
 
-.chip:hover {
+.date-chip {
+  margin-left: 0;
+}
+
+.chip:hover,
+.chip[aria-expanded='true'] {
   background: var(--hover);
   color: var(--fg);
 }
 
+.chip .chev {
+  color: var(--fg-subtle);
+}
+
 .chip[data-on='true'] {
-  border-color: transparent;
   background: var(--accent-soft);
   color: var(--accent-fg);
   font-weight: 500;
@@ -328,8 +421,9 @@ svg {
   text-overflow: ellipsis;
 }
 
-.count {
+.count-wrap {
   margin-left: auto;
+  padding-left: 8px;
   font-size: 12px;
   color: var(--fg-subtle);
   font-variant-numeric: tabular-nums;
@@ -343,7 +437,11 @@ svg {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 0 12px 8px;
+  padding: 8px 16px 0;
+}
+
+.notes:empty {
+  display: none;
 }
 
 .interpretation {
@@ -500,9 +598,10 @@ svg {
   position: relative;
   flex: 1;
   min-height: 0;
+  margin-top: 8px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0 6px;
+  padding: 0 10px;
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
@@ -521,18 +620,34 @@ svg {
   right: 0;
 }
 
-/* Section headers:  ▸ TITLE  count ………… date.  Today is always open: no chevron, no click. */
+/* Section headers:  ▸ TITLE  count ………… date.  Today is always open: no chevron, no click, flush left.
+   --gap is the air above a header that follows conversations; it is part of the row's height.
+   The header is 28px (26px nested) and leaves 6px below it, plus the 1px a conversation row insets. */
 .group {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   width: 100%;
-  height: 100%;
-  padding: 0 8px 0 4px;
-  border-radius: 6px;
+  height: calc(100% - var(--gap, 0px) - 6px);
+  margin-top: var(--gap, 0px);
+  padding: 0 6px 0 6px;
+  border-radius: 7px;
   cursor: pointer;
   user-select: none;
   text-align: left;
+  transition: background-color 0.12s;
+}
+
+/* Between an open section's last conversation and the next section. */
+.group[data-rule]::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: calc(var(--gap, 0px) / -2);
+  height: 1px;
+  background: var(--border);
 }
 
 .group:hover {
@@ -549,13 +664,9 @@ svg {
 
 .group .chev {
   flex: none;
+  margin: 0 -1px 0 -2px;
   color: var(--fg-subtle);
   transition: transform 0.12s ease;
-}
-
-.group .chev-spacer {
-  flex: none;
-  width: 14px;
 }
 
 .group[aria-expanded='false'] .chev {
@@ -588,24 +699,20 @@ svg {
   font-variant-numeric: tabular-nums;
 }
 
+/* Months inside "Older conversations". */
 .group[data-level='1'] {
-  padding-left: 18px;
+  padding-left: 22px;
 }
 
 .group[data-level='1'] .label {
   text-transform: none;
   letter-spacing: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
-  color: var(--fg);
+  color: var(--fg-muted);
 }
 
 /* Related: the same header, one step quieter than the chronology below it. */
-.related-head .rel-ico {
-  flex: none;
-  color: var(--fg-subtle);
-}
-
 .related-head .label {
   color: var(--fg-subtle);
 }
@@ -614,11 +721,12 @@ svg {
   display: block;
   width: 100%;
   height: 100%;
-  padding: 0 8px 0 33px;
-  border-radius: 6px;
+  padding: 0 8px 0 40px;
+  border-radius: 7px;
   text-align: left;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--fg-subtle);
+  transition: background-color 0.12s, color 0.12s;
 }
 
 .related-more:hover {
@@ -634,11 +742,11 @@ svg {
 }
 
 .sticky > div {
-  height: 34px;
+  height: 34px; /* = STICKY_HEIGHT in VirtualList.tsx: a 28px header and 6px of air */
   background: var(--bg);
   box-shadow: 0 1px 0 var(--border);
-  margin: 0 -6px;
-  padding: 0 6px;
+  margin: 0 -10px;
+  padding: 0 10px;
 }
 
 /* A day (or week) inside a group: quiet text, aligned with the titles, no rule. */
@@ -647,8 +755,8 @@ svg {
   align-items: flex-end;
   gap: 8px;
   height: 100%;
-  padding: 0 10px 4px 33px;
-  font-size: 11px;
+  padding: 0 10px 5px 40px;
+  font-size: 11.5px;
   line-height: 14px;
   color: var(--fg-subtle);
   font-variant-numeric: tabular-nums;
@@ -659,38 +767,46 @@ svg {
   opacity: 0.75;
 }
 
-/* One line per conversation:  [category icon] title ………… time */
+/* One line per conversation:  [16px category icon] title ………… time
+   The slot is 38px; the row inside it is 36px, which leaves a little air between neighbours. */
 .conv {
   position: absolute;
   inset: 1px 0;
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: 9px;
-  padding: 0 10px 0 8px;
-  border-radius: 6px;
+  column-gap: 12px;
+  padding: 0 10px;
+  border-radius: 8px;
   color: inherit;
   text-decoration: none;
+  transition: background-color 0.12s;
 }
 
 .conv[data-level='1'] {
-  padding-left: 22px;
+  padding-left: 26px;
 }
 
 .conv:hover {
   background: var(--hover);
 }
 
+/* A fixed box, so every title starts at the same x whichever icon the row has. */
 .conv .cat {
   display: grid;
   place-items: center;
-  color: var(--fg-subtle);
+  width: 18px;
+  height: 18px;
+  color: var(--fg-muted);
+  opacity: 0.85;
+  transition: color 0.12s, opacity 0.12s;
 }
 
 .conv .title {
   min-width: 0;
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 20px;
+  color: var(--fg-title);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -701,11 +817,13 @@ svg {
   font-style: italic;
 }
 
+/* At least 12px from the title (the column gap); the right edge is the row's padding, so times line up. */
 .conv .meta {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--fg-subtle);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -719,18 +837,23 @@ svg {
   line-height: 13px;
 }
 
-/* The open conversation: a tint and a thin accent edge, nothing louder. */
+/* The open conversation: a clear blue-grey fill and a brighter title and icon. No border, no glow. */
 .conv[aria-current='page'] {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .conv[aria-current='page'] .title {
+  color: var(--fg);
   font-weight: 500;
 }
 
 .conv[aria-current='page'] .cat {
-  color: var(--accent-fg);
+  color: var(--fg);
+  opacity: 1;
+}
+
+.conv[aria-current='page'] .when {
+  color: var(--fg-muted);
 }
 
 /* The keyboard cursor wins over the open-chat tint while you are moving. */
@@ -738,6 +861,19 @@ svg {
 .slot[data-active='true'] .conv,
 .slot[data-active='true'] .related-more {
   background: var(--active);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conv,
+  .conv .cat,
+  .group,
+  .group .chev,
+  .related-more,
+  .cat-chip,
+  .chip,
+  .search {
+    transition: none;
+  }
 }
 
 mark {
@@ -895,9 +1031,9 @@ kbd {
 /* The menu spans the toolbar, so it never spills past the panel edge. */
 .popover {
   position: absolute;
-  top: calc(100% - 2px);
-  left: 12px;
-  right: 12px;
+  top: calc(100% - 4px);
+  left: 0;
+  right: 0;
   z-index: 10;
   max-height: min(460px, 70vh);
   overflow-y: auto;
@@ -906,6 +1042,11 @@ kbd {
   background: var(--bg);
   box-shadow: var(--popover-shadow);
   overscroll-behavior: contain;
+}
+
+.popover.narrow {
+  right: auto;
+  width: 180px;
 }
 
 .popover .section {

@@ -5,14 +5,33 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import type { GroupRow, Row } from '../history/grouping'
 
 /** Must match the heights in styles.css. Compact: one line per conversation. */
-export const ROW_HEIGHT = { group0: 34, group1: 30, divider: 26, conversation: 32, more: 26 } as const
+export const ROW_HEIGHT = { group0: 34, group1: 32, divider: 26, conversation: 38, more: 28 } as const
 
-export function heightOf(row: Row): number {
+/** Height of the header that sticks to the top of the list; the header row itself, without the gap above it. */
+export const STICKY_HEIGHT = ROW_HEIGHT.group0
+
+/**
+ * Air above a header that follows conversations, so a new date section reads as
+ * one. A header that follows another header (a run of collapsed groups) gets none
+ * and stays compact, and so does the first row of the list.
+ */
+export function gapAbove(row: Row, prev: Row | undefined): number {
+  if (!prev || prev.type === 'group' || prev.type === 'related-header') return 0
+  if (row.type === 'related-header' || (row.type === 'group' && row.level === 0)) return 16
+  return row.type === 'group' ? 6 : 0
+}
+
+/** A hairline in that gap, between a date section's conversations and the next date section (not after Related). */
+export function ruleAbove(row: Row, prev: Row | undefined): boolean {
+  return row.type === 'group' && row.level === 0 && (prev?.type === 'conversation' || prev?.type === 'divider')
+}
+
+export function heightOf(row: Row, prev?: Row): number {
   switch (row.type) {
     case 'group':
-      return row.level === 0 ? ROW_HEIGHT.group0 : ROW_HEIGHT.group1
+      return (row.level === 0 ? ROW_HEIGHT.group0 : ROW_HEIGHT.group1) + gapAbove(row, prev)
     case 'related-header':
-      return ROW_HEIGHT.group0
+      return ROW_HEIGHT.group0 + gapAbove(row, prev)
     case 'divider':
       return ROW_HEIGHT.divider
     case 'related-more':
@@ -49,7 +68,7 @@ export function VirtualList({ rows, activeIndex, revealToken, initialScrollTop, 
     let lastTop = -1
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i]!
-      offsets[i + 1] = offsets[i]! + heightOf(r)
+      offsets[i + 1] = offsets[i]! + heightOf(r, rows[i - 1])
       if (r.type === 'group' && r.level === 0) {
         if (lastTop >= 0) nextTopGroup[lastTop] = i
         lastTop = i
@@ -83,7 +102,7 @@ export function VirtualList({ rows, activeIndex, revealToken, initialScrollTop, 
     const top = layout.offsets[activeIndex]!
     const bottom = layout.offsets[activeIndex + 1]!
     const row = rows[activeIndex]!
-    const pinned = row.type === 'group' && row.level === 0 ? 0 : ROW_HEIGHT.group0
+    const pinned = row.type === 'group' && row.level === 0 ? 0 : STICKY_HEIGHT
     if (top < el.scrollTop + pinned) el.scrollTop = Math.max(0, top - pinned)
     else if (bottom > el.scrollTop + el.clientHeight) el.scrollTop = bottom - el.clientHeight
   }, [revealToken]) // Only when asked to reveal, not on every scroll.
@@ -96,7 +115,7 @@ export function VirtualList({ rows, activeIndex, revealToken, initialScrollTop, 
   for (let i = start; i < end; i++) {
     const row = rows[i]!
     slots.push(
-      <div key={row.key} className="slot" style={{ top: offsets[i], height: heightOf(row) }} data-active={i === activeIndex || undefined}>
+      <div key={row.key} className="slot" style={{ top: offsets[i], height: heightOf(row, rows[i - 1]) }} data-active={i === activeIndex || undefined}>
         {renderRow(row, i)}
       </div>,
     )
@@ -108,7 +127,9 @@ export function VirtualList({ rows, activeIndex, revealToken, initialScrollTop, 
   const g = rows.length ? topGroup[first]! : -1
   if (g >= 0 && offsets[g]! < scrollTop) {
     const next = nextTopGroup[g]!
-    const push = next >= 0 ? Math.min(0, offsets[next]! - scrollTop - ROW_HEIGHT.group0) : 0
+    // The next header's own gap is empty space: the pinned one starts leaving when its label arrives, not its slot.
+    const arrives = next >= 0 ? offsets[next]! + gapAbove(rows[next]!, rows[next - 1]) : 0
+    const push = next >= 0 ? Math.min(0, arrives - scrollTop - STICKY_HEIGHT) : 0
     sticky = (
       <div className="sticky" aria-hidden="true">
         <div style={{ transform: `translateY(${push}px)` }} data-active={g === activeIndex || undefined} className="slot-sticky">

@@ -13,7 +13,7 @@
 import { CONVERSATION_HREF, SELECTORS, findEntrySlot, findRailSlot, isHiddenCopy, type EntrySlot, type RailSlot } from '../chatgpt/selectors'
 import type { HistoryIndex, TimestampMode } from '../history/types'
 import { effectiveTime } from '../history/types'
-import { formatCompact, formatFull } from '../utils/dates'
+import { formatCompact, formatFull, type TimeFormat } from '../utils/dates'
 import { SHORTCUT_LABEL } from '../shared/platform'
 import type { Theme } from './theme'
 
@@ -86,6 +86,7 @@ export interface SidebarView {
   rail: HTMLElement | null
   index: HistoryIndex | null
   mode: TimestampMode
+  timeFormat: TimeFormat
   showDates: boolean
   /** The floating launcher may appear (not while signed out or still identifying). */
   allowLauncher: boolean
@@ -118,7 +119,7 @@ export class NativeSidebar {
     if (view.nav) this.placeEntry(view.nav)
     if (view.rail) this.placeRailEntry(view.rail)
     if (view.nav) {
-      if (view.showDates && view.index) decorateDates(view.nav, view.index, view.mode)
+      if (view.showDates && view.index) decorateDates(view.nav, view.index, view.mode, view.timeFormat)
       else removeDates(view.nav)
     }
     this.syncLauncher()
@@ -291,7 +292,7 @@ function ensurePageStyle() {
   ;(document.head ?? document.documentElement).append(style)
 }
 
-function decorateDates(nav: HTMLElement, index: HistoryIndex, mode: TimestampMode) {
+function decorateDates(nav: HTMLElement, index: HistoryIndex, mode: TimestampMode, timeFormat: TimeFormat) {
   const now = new Date()
   for (const link of nav.querySelectorAll<HTMLAnchorElement>(SELECTORS.conversationLink)) {
     // Skip decorative duplicates (a row's aria-hidden icon link, the hidden rail).
@@ -307,7 +308,7 @@ function decorateDates(nav: HTMLElement, index: HistoryIndex, mode: TimestampMod
       span?.remove()
       continue
     }
-    const text = formatCompact(ts, now)
+    const text = formatCompact(ts, now, undefined, timeFormat)
     if (!span) {
       span = document.createElement('span')
       // Sit before ChatGPT's trailing "…" menu if there is one, and hide on
@@ -317,10 +318,10 @@ function decorateDates(nav: HTMLElement, index: HistoryIndex, mode: TimestampMod
       span.setAttribute('aria-hidden', 'true')
       link.insertBefore(span, trailing ?? null)
     }
-    if (span.textContent !== text) {
-      span.textContent = text
-      span.title = formatFull(ts)
-    }
+    if (span.textContent !== text) span.textContent = text
+    // Not tied to the text: the tooltip carries a time of day even when the label is only a date.
+    const full = formatFull(ts, undefined, timeFormat)
+    if (span.title !== full) span.title = full
   }
 }
 

@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test'
 import { accountKey, expect, openPanel, panel, rows, search, test, waitForSync } from './fixtures'
 
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control'
@@ -110,7 +111,7 @@ test.describe('History+', () => {
     expect(hits.every(Boolean)).toBe(true)
     // The panel's own width is unchanged.
     const width = await page.evaluate(() => document.getElementById('chatgpt-history-plus-root')!.shadowRoot!.querySelector('.panel')!.getBoundingClientRect().width)
-    expect(Math.round(width)).toBe(400)
+    expect(Math.round(width)).toBe(380)
   })
 
   test('going to another rail destination slides the panel back; other rail buttons leave it open', async ({ page }) => {
@@ -368,7 +369,7 @@ test.describe('History+', () => {
     // Same density and structure as an ordinary row; date and time, compactly, on the right.
     const row = related.filter({ hasText: 'follow-up fixes' })
     await expect(row.locator('.cat svg')).toHaveCount(1)
-    await expect(row.locator('.when')).toHaveText(/^[A-Z][a-z]{2} \d{1,2}(, \d{4})? · \d{2}:\d{2}$/)
+    await expect(row.locator('.when')).toHaveText(/^[A-Z][a-z]{2} \d{1,2}(, \d{4})? · \d{1,2}:\d{2}\s[AP]M$/)
     const heights = await panel(page).locator('.conv').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)))
     expect(new Set(heights).size).toBe(1)
     // The reason is hover text, derived from the match.
@@ -442,7 +443,7 @@ test.describe('History+', () => {
     expect(await list.evaluate((el) => el.scrollTop)).toBe(400)
   })
 
-  test('rows are one line: category icon, title, right-aligned 24-hour time', async ({ page }) => {
+  test('rows are one line: category icon, title, right-aligned 12-hour time', async ({ page }) => {
     await page.goto('https://chatgpt.com/')
     await openPanel(page)
     await waitForSync(page, 650)
@@ -455,13 +456,21 @@ test.describe('History+', () => {
         const title = e.querySelector('.title')!.getBoundingClientRect()
         const when = e.querySelector('.when') as HTMLElement
         const w = when.getBoundingClientRect()
-        return { h: r.height, catLeft: cat.left - r.left, titleLeft: title.left, whenRight: w.right, rowRight: r.right, when: when.textContent, tab: getComputedStyle(when).fontVariantNumeric }
+        const svg = e.querySelector('.cat svg')!.getBoundingClientRect()
+        return { h: r.height, catLeft: cat.left - r.left, catWidth: cat.width, iconSize: svg.width, titleLeft: title.left, titleRight: title.right, whenLeft: w.left, whenRight: w.right, rowRight: r.right, when: when.textContent, tab: getComputedStyle(when).fontVariantNumeric }
       }),
     )
     for (const row of m) {
-      expect(row.h).toBeLessThanOrEqual(32) // compact
-      expect(row.when).toMatch(/^\d{2}:\d{2}$/)
+      expect(row.h).toBeGreaterThanOrEqual(34) // roomy enough to scan, still one line
+      expect(row.h).toBeLessThanOrEqual(38)
+      expect(row.when).toMatch(/^\d{1,2}:\d{2}\s[AP]M$/)
       expect(row.tab).toContain('tabular-nums')
+    }
+    for (const row of m) {
+      expect(row.catWidth).toBe(18) // fixed icon box
+      expect(row.iconSize).toBe(15)
+      expect(row.whenLeft - row.titleRight).toBeGreaterThanOrEqual(12) // never crowds the title
+      expect(row.rowRight - row.whenRight).toBeGreaterThanOrEqual(8)
     }
     expect(Math.abs(m[0]!.whenRight - m[1]!.whenRight)).toBeLessThan(1) // times line up
     expect(Math.abs(m[0]!.catLeft - m[1]!.catLeft)).toBeLessThan(1) // icons line up
@@ -470,6 +479,313 @@ test.describe('History+', () => {
     await expect(todays.filter({ hasText: 'Investigate Meta sync failure' }).locator('.cat')).toHaveAttribute('title', 'Debugging')
     await expect(todays.filter({ hasText: 'Review duplicate Paytm debit query' }).locator('.cat')).toHaveAttribute('title', 'Payments')
     await expect(todays.first()).toHaveAttribute('title', /Created: .*\nLast active: /)
+  })
+
+  const chip = (page: Page, label: string) => panel(page).locator('.cat-chip', { hasText: new RegExp(`^${label}`) })
+  /** Chips carry no numbers; the count is in the hover text ("12 chats"). */
+  const chipCount = async (page: Page, label: string) => Number((await chip(page, label).getAttribute('title'))!.replace(/[^\d]/g, ''))
+  const sortBy = async (page: Page, name: 'Last active' | 'Created') => {
+    await panel(page).locator('.sort-chip').click()
+    await panel(page).getByRole('menuitemradio', { name }).click()
+  }
+  /** What the date groups say, summed (the related block is not a date group). */
+  const groupTotal = (page: Page) =>
+    panel(page)
+      .locator('.list .group[data-level="0"]:not(.related-head) .n')
+      .evaluateAll((els) => els.reduce((sum, e) => sum + Number((e.textContent ?? '0').replace(/,/g, '')), 0))
+
+  test('category chips: one row under the search that scrolls sideways, All selected, no numbers', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    await waitForSync(page, 650)
+    const labels = await panel(page).locator('.cat-chip > span').allTextContents()
+    expect(labels).toEqual(['All', 'Reviews', 'Engineering', 'Analytics', 'Product', 'Payments', 'Writing', 'Other'])
+    await expect(chip(page, 'All')).toHaveAttribute('aria-pressed', 'true')
+    await expect(panel(page).locator('.cat-chip[aria-pressed="true"]')).toHaveCount(1)
+    await expect(chip(page, 'Engineering')).toHaveAttribute('title', /^\d[\d,]* chats?$/)
+
+    const m = await panel(page).evaluate((root) => {
+      const scroller = root.querySelector<HTMLElement>('.cats-scroll')!
+      const chips = [...root.querySelectorAll<HTMLElement>('.cat-chip')]
+      const search = root.querySelector('.search')!.getBoundingClientRect()
+      const box = scroller.getBoundingClientRect()
+      const cs = getComputedStyle(chips[1]!)
+      return {
+        lines: new Set(chips.map((c) => Math.round(c.getBoundingClientRect().top))).size,
+        digits: chips.some((c) => /\d/.test(c.textContent ?? '')),
+        icons: [...new Set(chips.map((c) => c.querySelector('svg')!.getBoundingClientRect().width))],
+        scrolls: scroller.scrollWidth > scroller.clientWidth,
+        scrollbar: getComputedStyle(scroller).scrollbarWidth,
+        overscroll: getComputedStyle(scroller).overscrollBehaviorX,
+        belowSearch: box.top >= search.bottom && box.top - search.bottom <= 16,
+        hidden: chips.filter((c) => c.getBoundingClientRect().right > box.right).map((c) => c.textContent),
+        pageOverflow: root.scrollWidth > root.clientWidth,
+        height: chips[0]!.getBoundingClientRect().height,
+        gap: chips[1]!.getBoundingClientRect().left - chips[0]!.getBoundingClientRect().right,
+        padding: parseFloat(cs.paddingLeft),
+        border: cs.borderTopWidth,
+        shadow: cs.boxShadow,
+      }
+    })
+    expect(m.lines).toBe(1) // never wraps
+    expect(m.digits).toBe(false)
+    expect(m.icons).toEqual([14])
+    expect(m.scrolls).toBe(true)
+    expect(m.hidden).toContain('Other') // reached by scrolling
+    expect(m.scrollbar).toBe('none')
+    expect(m.overscroll).toBe('contain') // a swipe past the end is not browser back/forward
+    expect(m.belowSearch).toBe(true)
+    expect(m.pageOverflow).toBe(false)
+    expect(m.height).toBeGreaterThanOrEqual(28)
+    expect(m.height).toBeLessThanOrEqual(30)
+    expect(m.gap).toBeGreaterThanOrEqual(6)
+    expect(m.gap).toBeLessThanOrEqual(8)
+    expect(m.padding).toBeGreaterThanOrEqual(10)
+    expect(m.padding).toBeLessThanOrEqual(12)
+    expect(m.border).toBe('0px')
+    expect(m.shadow).toBe('none')
+
+    // The right edge fades while there is more; at the end, the left edge does instead.
+    const cats = panel(page).locator('.cats')
+    await expect(cats).toHaveAttribute('data-fade-end', 'true')
+    await expect(cats).not.toHaveAttribute('data-fade-start', /.*/)
+
+    // A mouse wheel over the chips scrolls them sideways, and nothing else.
+    const listTop = () => panel(page).locator('.list').evaluate((el) => el.scrollTop)
+    const before = await listTop()
+    await chip(page, 'Engineering').hover()
+    await page.mouse.wheel(0, 400)
+    await expect.poll(() => panel(page).locator('.cats-scroll').evaluate((el) => el.scrollLeft)).toBeGreaterThan(0)
+    expect(await listTop()).toBe(before)
+    await expect(chip(page, 'Other')).toBeInViewport({ ratio: 1 })
+    await expect(cats).toHaveAttribute('data-fade-start', 'true')
+    await expect(cats).not.toHaveAttribute('data-fade-end', /.*/)
+  })
+
+  test('picking a category filters the list; counts add up; the same chip again returns to All', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    await waitForSync(page, 650)
+    const count = panel(page).locator('.count')
+
+    // Each conversation lands under exactly one chip: the counts add up to everything.
+    const names = ['Reviews', 'Engineering', 'Product', 'Payments', 'Writing', 'Other']
+    let sum = 0
+    for (const n of names) sum += await chipCount(page, n)
+    expect(sum).toBe(650)
+
+    await chip(page, 'Payments').click()
+    const payments = await chipCount(page, 'Payments')
+    expect(payments).toBeGreaterThan(0)
+    await expect(chip(page, 'Payments')).toHaveAttribute('aria-pressed', 'true')
+    await expect(chip(page, 'All')).toHaveAttribute('aria-pressed', 'false')
+    await expect(count).toHaveText(`${payments} of 650`)
+    // Date-group counts reflect the filter too: they add up to the chip.
+    expect(await groupTotal(page)).toBe(payments)
+    // Every row that is showing is a payments row (Today is open; the rest are collapsed).
+    await expect(rows(page)).toHaveCount(1)
+    await expect(rows(page).first().locator('.title')).toHaveText('Review duplicate Paytm debit query')
+    await expect(rows(page).first().locator('.cat')).toHaveAttribute('data-category', 'payments')
+
+    // Open collapsed groups (Older holds months) until older chats show: still only payments rows, each with its icon.
+    for (let i = 0; i < 3 && (await rows(page).count()) < 2; i++) await panel(page).locator('.list .group[aria-expanded="false"]').first().click()
+    const kinds = await rows(page).evaluateAll((els) => els.map((e) => e.querySelector('.cat')!.getAttribute('data-category')))
+    expect(kinds.length).toBeGreaterThan(1)
+    expect(new Set(kinds)).toEqual(new Set(['payments']))
+
+    // The chip again: back to All, and nothing else was reset.
+    await chip(page, 'Payments').click()
+    await expect(chip(page, 'All')).toHaveAttribute('aria-pressed', 'true')
+    await expect(count).toHaveText('650')
+    await chip(page, 'Engineering').click()
+    await chip(page, 'All').click()
+    await expect(count).toHaveText('650')
+  })
+
+  test('category works with search, date and sorting, and switching it keeps them', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    await waitForSync(page, 650)
+    const count = panel(page).locator('.count')
+
+    // Search: chip counts follow the matches, and the selected chip narrows them further.
+    await search(page).fill('paytm')
+    await expect(count).toHaveText(/^\d+ of 650$/)
+    const matches = Number((await count.textContent())!.split(' ')[0])
+    // Paytm chats are payments chats, except the architecture one, which is engineering work.
+    expect(await chipCount(page, 'Payments')).toBe(matches - 1)
+    expect(await chipCount(page, 'Engineering')).toBe(1)
+    expect(await chipCount(page, 'Writing')).toBe(0)
+    await expect(chip(page, 'Writing')).toHaveAttribute('data-empty', 'true')
+    await chip(page, 'Payments').click()
+    await expect(count).toHaveText(`${matches - 1} of 650`)
+    await expect(search(page)).toHaveValue('paytm') // switching did not reset the query
+
+    // Sorting is independent of the chip.
+    await sortBy(page, 'Created')
+    await chip(page, 'Writing').click()
+    await expect(panel(page).locator('.sort-chip')).toHaveText('Created')
+    await expect(search(page)).toHaveValue('paytm')
+    await expect(rows(page)).toHaveCount(0)
+    await expect(panel(page).getByText('No matching conversations')).toBeVisible()
+    // The empty state says why and offers the way out.
+    await panel(page).getByRole('button', { name: 'Show all categories' }).click()
+    await expect(chip(page, 'All')).toHaveAttribute('aria-pressed', 'true')
+    await expect(count).toHaveText(`${matches} of 650`)
+
+    // Date filter: Today holds one debugging (engineering) chat and one payments chat.
+    await search(page).fill('')
+    await panel(page).getByRole('button', { name: 'All dates' }).click()
+    await panel(page).getByRole('menuitemradio', { name: 'Today' }).click()
+    await expect(count).toHaveText('2 of 650')
+    expect(await chipCount(page, 'Engineering')).toBe(1)
+    expect(await chipCount(page, 'Payments')).toBe(1)
+    expect(await chipCount(page, 'Writing')).toBe(0)
+    await chip(page, 'Engineering').click()
+    await expect(count).toHaveText('1 of 650')
+    await expect(rows(page)).toHaveCount(1)
+    await expect(rows(page).first().locator('.title')).toHaveText('Investigate Meta sync failure')
+    await expect(panel(page).locator('.date-chip')).toContainText('Today') // the date filter is still on
+  })
+
+  test('the selected category is remembered: reopening the panel, and reloading the page', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    await waitForSync(page, 650)
+    await chip(page, 'Other').click()
+    await expect(chip(page, 'Other')).toHaveAttribute('aria-pressed', 'true')
+
+    await page.keyboard.press('Escape') // search is empty, so this closes the panel
+    await expect(panel(page)).toHaveCount(0)
+    await openPanel(page)
+    await expect(chip(page, 'Other')).toHaveAttribute('aria-pressed', 'true')
+    await expect(panel(page).locator('.count')).toHaveText(/^\d+ of 650$/)
+
+    await page.waitForTimeout(400) // debounced save
+    await page.reload()
+    await openPanel(page)
+    await expect(chip(page, 'Other')).toHaveAttribute('aria-pressed', 'true')
+    // Reopened with the chip scrolled into view, not left behind the fade.
+    await expect(chip(page, 'Other')).toBeInViewport({ ratio: 1 })
+  })
+
+  test('chips are keyboard reachable: one tab stop, arrows move, Enter picks', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    await waitForSync(page, 650)
+    await chip(page, 'All').focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(chip(page, 'Reviews')).toBeFocused()
+    await page.keyboard.press('End')
+    await expect(chip(page, 'Other')).toBeFocused()
+    await expect(chip(page, 'Other')).toBeInViewport({ ratio: 1 }) // focus scrolls it into view
+    await page.keyboard.press('Enter')
+    await expect(chip(page, 'Other')).toHaveAttribute('aria-pressed', 'true')
+    await page.keyboard.press('Home')
+    await expect(chip(page, 'All')).toBeFocused()
+    // Only the selected chip is in the tab order.
+    const tabbable = await panel(page).locator('.cat-chip').evaluateAll((els) => els.filter((e) => (e as HTMLElement).tabIndex >= 0).length)
+    expect(tabbable).toBe(1)
+  })
+
+  test('date groups: Today has no control; the others keep a chevron, count and date, and the current chat is subtle', async ({ page, server }) => {
+    const id = server.conversations[3]!.id
+    await page.goto(`https://chatgpt.com/c/${id}`)
+    await openPanel(page)
+    await waitForSync(page, 650)
+    const group = (name: string) => panel(page).locator('.list .group', { hasText: name }).first()
+    // The month-by-month archive is behind one header.
+    const top = await panel(page).locator('.list .group[data-level="0"]:not(.related-head) .label').allTextContents()
+    expect(top).toEqual(['Today', 'Yesterday', 'Earlier this week', 'Last week', 'Older conversations'])
+    await expect(group('Older conversations').locator('.sublabel')).toHaveCount(0)
+    await group('Older conversations').click()
+    const months = await panel(page).locator('.list .group[data-level="1"] .label').allTextContents()
+    expect(months.length).toBeGreaterThan(3)
+    expect(months[0]).toMatch(/^[A-Z][a-z]+$/) // this year's months need no year
+    expect(months.at(-1)).toMatch(/^[A-Z][a-z]+ \d{4}$/)
+    await group('Older conversations').click()
+    await expect(group('Today')).not.toHaveAttribute('role', 'button')
+    expect(await group('Today').evaluate((el) => el.tagName)).toBe('DIV')
+    expect(await group('Yesterday').evaluate((el) => el.tagName)).toBe('BUTTON')
+    const m = await group('Yesterday').evaluate((el) => {
+      const label = el.querySelector('.label')!
+      const sub = el.querySelector('.sublabel')!.getBoundingClientRect()
+      const r = el.getBoundingClientRect()
+      const cs = getComputedStyle(label)
+      return { upper: cs.textTransform, size: parseFloat(cs.fontSize), spacing: cs.letterSpacing, right: r.right - sub.right, sublabelAfterLabel: sub.left > label.getBoundingClientRect().right }
+    })
+    expect(m.upper).toBe('uppercase')
+    expect(m.size).toBeGreaterThanOrEqual(10)
+    expect(m.size).toBeLessThanOrEqual(11)
+    expect(m.spacing).not.toBe('normal')
+    expect(m.right).toBeLessThan(12) // the date is flush right
+    expect(m.sublabelAfterLabel).toBe(true)
+    // Rows under Today: a few px between the header and the first conversation below it.
+    const gap = await panel(page).evaluate((root) => {
+      const h = root.querySelector('.list .group.static')!.getBoundingClientRect()
+      const below = [...root.querySelectorAll('.list .conv')].map((c) => c.getBoundingClientRect().top - h.bottom).filter((d) => d >= 0)
+      return Math.min(...below)
+    })
+    expect(gap).toBeGreaterThanOrEqual(4)
+    expect(gap).toBeLessThanOrEqual(8)
+    // A new section after an open one has air above it, with a hairline in the middle.
+    const above = await panel(page).evaluate((root) => {
+      const y = [...root.querySelectorAll('.list .group:not(.static):not(.related-head)')][0]!.getBoundingClientRect()
+      const before = [...root.querySelectorAll('.list .conv')].map((c) => y.top - c.getBoundingClientRect().bottom).filter((d) => d >= 0)
+      return Math.min(...before)
+    })
+    expect(above).toBeGreaterThanOrEqual(14)
+    expect(above).toBeLessThanOrEqual(18)
+    await expect(panel(page).locator('.list .group[data-rule]').first()).toContainText('Yesterday')
+
+    // Open the chat that is current: a wash of colour, no border, no shadow, and the title only a little brighter.
+    await group('Earlier this week').click()
+    const current = panel(page).locator('.conv[aria-current="page"]')
+    await expect(current).toHaveCount(1)
+    const style = await current.evaluate((el) => {
+      const cs = getComputedStyle(el)
+      const other = el.parentElement!.parentElement!.querySelector('.conv:not([aria-current])')!
+      return { shadow: cs.boxShadow, border: cs.borderTopWidth, radius: parseFloat(cs.borderTopLeftRadius), bg: cs.backgroundColor, titleColor: getComputedStyle(el.querySelector('.title')!).color, otherTitle: getComputedStyle(other.querySelector('.title')!).color }
+    })
+    expect(style.shadow).toBe('none')
+    expect(style.border).toBe('0px')
+    expect(style.radius).toBeGreaterThanOrEqual(6)
+    expect(style.radius).toBeLessThanOrEqual(8)
+    expect(style.bg).not.toBe('rgba(0, 0, 0, 0)')
+    expect(style.titleColor).not.toBe(style.otherTitle)
+  })
+
+  test('time format: 12-hour with AM/PM by default; 24-hour from Settings, in the list and the native sidebar', async ({ page }) => {
+    await page.goto('https://chatgpt.com/')
+    await openPanel(page)
+    await waitForSync(page, 650)
+    const todays = rows(page).locator('.when')
+    // Native sidebar: a chat from today shows its time; an older one shows a date, with the time in its tooltip.
+    const nativeToday = page.locator('nav a', { hasText: 'Investigate Meta sync failure' }).locator('[data-chp-date]').first()
+    const nativeOlder = page.locator('nav [data-chp-date][title]', { hasText: /^[A-Z][a-z]{2} \d{1,2}$/ }).first()
+    await expect(todays.first()).toHaveText(/^\d{1,2}:\d{2}\s[AP]M$/)
+    await expect(nativeToday).toHaveText(/^\d{1,2}:\d{2}\s[AP]M$/)
+    await expect(nativeOlder).toHaveAttribute('title', /· \d{1,2}:\d{2}\s[AP]M$/)
+
+    await panel(page).getByRole('button', { name: 'Settings' }).click()
+    await expect(panel(page).getByRole('radio', { name: /12-hour/ })).toBeChecked()
+    await panel(page).getByRole('radio', { name: /24-hour/ }).check()
+    await panel(page).getByRole('button', { name: 'Back' }).click()
+    await expect(todays.first()).toHaveText(/^\d{2}:\d{2}$/)
+    await expect(nativeToday).toHaveText(/^\d{2}:\d{2}$/)
+    await expect(nativeOlder).toHaveAttribute('title', /· \d{2}:\d{2}$/) // a date-only label, but its tooltip changed
+    // The hover text follows too.
+    await expect(rows(page).first()).toHaveAttribute('title', /Last active: .* · \d{2}:\d{2}/)
+
+    // It sticks.
+    await page.reload()
+    await openPanel(page)
+    await expect(rows(page).locator('.when').first()).toHaveText(/^\d{2}:\d{2}$/)
+    await panel(page).getByRole('button', { name: 'Settings' }).click()
+    await expect(panel(page).getByRole('radio', { name: /24-hour/ })).toBeChecked()
+    await panel(page).getByRole('radio', { name: /12-hour/ }).check()
+    await panel(page).getByRole('button', { name: 'Back' }).click()
+    await expect(rows(page).locator('.when').first()).toHaveText(/^\d{1,2}:\d{2}\s[AP]M$/)
   })
 
   test('stays usable at narrow widths: long titles ellipsise and nothing scrolls sideways', async ({ page, server }) => {
@@ -556,9 +872,9 @@ test.describe('History+', () => {
     await panel(page).getByRole('button', { name: 'All dates' }).click()
     await panel(page).getByRole('menuitemradio', { name: 'Today' }).click()
     await expect(panel(page).locator('.count')).toHaveText('2 of 650')
-    await panel(page).getByRole('button', { name: 'Created' }).click()
-    await expect(panel(page).getByRole('button', { name: 'Created' })).toHaveAttribute('aria-pressed', 'true')
-    await panel(page).locator('.chip').click()
+    await sortBy(page, 'Created')
+    await expect(panel(page).locator('.sort-chip')).toHaveText('Created')
+    await panel(page).locator('.date-chip').click()
     await panel(page).getByRole('menuitemradio', { name: 'All dates' }).click()
     await expect(panel(page).locator('.count')).toHaveText('650')
   })

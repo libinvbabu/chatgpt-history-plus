@@ -9,6 +9,7 @@ import { buildRelatedRows, type RelatedEntry } from '../history/related-rows'
 import { inRanges, makeSearchDoc, matches, parseQuery, type FieldRange, type ParsedQuery, type SearchDoc } from '../history/search'
 import { effectiveTime, type HistoryIndex, type Settings, type StoredConversation } from '../history/types'
 import type { DateFilter, PresetId } from '../content/store'
+import { filterFor, FILTERS, type CategoryFilterId, type FilterId } from './categories'
 
 export const PRESETS: Array<{ id: PresetId; label: string; phrase: string }> = [
   { id: 'today', label: 'Today', phrase: 'today' },
@@ -55,14 +56,28 @@ function docFor(c: StoredConversation): SearchDoc {
   return d
 }
 
+export type CategoryCounts = Record<FilterId, number>
+
 export interface HistoryView {
   rows: Row[]
   sorted: Entry[]
   parsed: ParsedQuery
   filterRange: FieldRange | null
+  /** A search or date filter is narrowing the list. (A category alone is not: groups keep the user's collapse state.) */
   filtering: boolean
+  /** Anything at all is narrowing the list, category included. */
+  narrowed: boolean
+  /** Per chip, how many conversations pass the search and date filters. Independent of the selected chip, so it says what picking one would show. */
+  categoryCounts: CategoryCounts
   matchCount: number
   total: number
+}
+
+export function countByCategory(entries: readonly Entry[]): CategoryCounts {
+  const counts = Object.fromEntries(FILTERS.map((f) => [f.id, 0])) as CategoryCounts
+  counts.all = entries.length
+  for (const e of entries) counts[filterFor(e.conv)]++
+  return counts
 }
 
 export function useHistoryView(args: {
@@ -72,13 +87,14 @@ export function useHistoryView(args: {
   query: string
   literal: boolean
   dateFilter: DateFilter | null
+  category: FilterId
   collapsed: Record<string, boolean>
   transientCollapsed: Record<string, boolean>
   ctx: DateContext
   /** Chats related to the open one; shown above Today when not searching. */
   related: readonly RelatedEntry[]
 }): HistoryView {
-  const { index, indexRev, settings, query, literal, dateFilter, collapsed, transientCollapsed, ctx, related } = args
+  const { index, indexRev, settings, query, literal, dateFilter, category, collapsed, transientCollapsed, ctx, related } = args
   const mode = settings.timestampMode
 
   const sorted = useMemo(() => {
@@ -92,11 +108,14 @@ export function useHistoryView(args: {
   const filterRange = useMemo(() => resolveDateFilter(dateFilter, ctx), [dateFilter, ctx])
   const filtering = parsed.terms.length > 0 || parsed.ranges.length > 0 || filterRange !== null
 
-  const entries = useMemo(() => {
+  // Search and date first; the category chip narrows what is left. Counts per chip come from the step before it.
+  const scoped = useMemo(() => {
     if (!filtering) return sorted
     const extra = filterRange ? [filterRange] : []
     return sorted.filter((e) => matches(e.conv, docFor(e.conv), parsed, mode) && inRanges(e.conv, extra, mode))
   }, [sorted, parsed, filterRange, filtering, mode])
+  const categoryCounts = useMemo(() => countByCategory(scoped), [scoped])
+  const entries = useMemo(() => (category === 'all' ? scoped : scoped.filter((e) => filterFor(e.conv) === category)), [scoped, category])
 
   const chronological = useMemo(
     () =>
@@ -111,11 +130,15 @@ export function useHistoryView(args: {
     [entries, ctx, settings.grouping, filtering, transientCollapsed, collapsed],
   )
 
-  // Searching shows matches only; the related block steps aside.
-  const relatedRows = useMemo(() => (filtering ? [] : buildRelatedRows(related, collapsed)), [filtering, related, collapsed])
+  // Searching shows matches only; the related block steps aside. A chip keeps it, narrowed to the same category.
+  const relatedRows = useMemo(() => {
+    if (filtering) return []
+    const items = category === 'all' ? related : related.filter((r) => filterFor(r.entry.conv) === (category as CategoryFilterId))
+    return buildRelatedRows(items, collapsed)
+  }, [filtering, related, category, collapsed])
   const rows = useMemo(() => (relatedRows.length ? [...relatedRows, ...chronological] : chronological), [relatedRows, chronological])
 
-  return { rows, sorted, parsed, filterRange, filtering, matchCount: entries.length, total: sorted.length }
+  return { rows, sorted, parsed, filterRange, filtering, narrowed: filtering || category !== 'all', categoryCounts, matchCount: entries.length, total: sorted.length }
 }
 
 /** A DateContext that only changes when the calendar day (or locale setup) does. */

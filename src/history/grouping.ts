@@ -2,8 +2,8 @@
 //
 // Smart grouping (default):
 //   Today · Yesterday · Earlier this week · Last week
-//   <each month of the current year>
-//   <each earlier year>  →  <its months>
+//   Older conversations  →  <each month, newest first>
+// The month-by-month archive sits behind one header, so the list stays short.
 // Today is always open. Every other group starts collapsed, and only the
 // user's own choice (or a search) opens it. Week groups carry a day divider
 // per day, so their rows need only a time; large month groups get week
@@ -103,8 +103,8 @@ interface Context {
     thisWeek?: Bucket
     lastWeek: Bucket
   }
+  older: Bucket
   monthBuckets: Map<string, Bucket>
-  yearBuckets: Map<number, Bucket>
   unknown: Bucket
 }
 
@@ -137,37 +137,31 @@ function makeContext(opts: GroupOptions): Context {
           : undefined,
       lastWeek: { key: 'last-week', label: 'Last week', sublabel: formatDayRange(lastWeekD, addDays(recentEnd, -1), now, locale), defaultExpanded: false, split: 'days' },
     },
+    older: { key: 'older', label: 'Older conversations', defaultExpanded: false },
     monthBuckets: new Map(),
-    yearBuckets: new Map(),
     unknown: { key: 'unknown', label: 'Unknown date', defaultExpanded: false },
   }
 }
 
-function monthBucket(ctx: Context, ts: number, inYear: boolean): Bucket {
+/** A month: top level in month grouping, or inside "Older conversations" in smart grouping. */
+function monthBucket(ctx: Context, ts: number, inOlder: boolean): Bucket {
   const d = new Date(ts)
   const mk = monthKey(d)
-  const key = inYear ? `y:${d.getFullYear()}/m:${mk}` : `m:${mk}`
+  const key = inOlder ? `older/m:${mk}` : `m:${mk}`
   let b = ctx.monthBuckets.get(key)
   if (!b) {
     const isCurrent = startOfMonth(d).getTime() === ctx.currentMonth
+    // Inside "Older", this year's months need no year.
+    const thisYear = startOfYear(d).getTime() === ctx.currentYear
     b = {
       key,
-      label: inYear ? ctx.f.month.format(d) : ctx.f.monthYear.format(d),
+      label: inOlder && thisYear ? ctx.f.month.format(d) : ctx.f.monthYear.format(d),
       // Month grouping has no Today group, so the current month (which holds today) starts open there.
       defaultExpanded: isCurrent && ctx.opts.grouping === 'month',
       showRange: true,
       split: 'weeks',
     }
     ctx.monthBuckets.set(key, b)
-  }
-  return b
-}
-
-function yearBucket(ctx: Context, year: number): Bucket {
-  let b = ctx.yearBuckets.get(year)
-  if (!b) {
-    b = { key: `y:${year}`, label: String(year), defaultExpanded: false, showRange: true }
-    ctx.yearBuckets.set(year, b)
   }
   return b
 }
@@ -185,10 +179,8 @@ function pathFor(ctx: Context, ts: number | null): Path {
     path = { top: ctx.recent.thisWeek }
   } else if (ts >= ctx.lastWeek) {
     path = { top: ctx.recent.lastWeek }
-  } else if (ts >= ctx.currentYear) {
-    path = { top: monthBucket(ctx, ts, false) }
   } else {
-    path = { top: yearBucket(ctx, new Date(ts).getFullYear()), sub: monthBucket(ctx, ts, true) }
+    path = { top: ctx.older, sub: monthBucket(ctx, ts, true) }
   }
   const host = path.sub ?? path.top
   if (host.split) {

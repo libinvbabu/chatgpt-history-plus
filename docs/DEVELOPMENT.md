@@ -43,7 +43,9 @@ src/
     extract.ts      rule-based entities (PR, repo, ticket, provider…), topics, activity, category
     engine.ts       inverted index, time-sliced indexing, retrieval, scoring, evidence gate
     reasons.ts      hover explanations built from what actually matched
-  ui/             React panel (shadow DOM), custom virtual list, settings
+  ui/             React panel (shadow DOM), custom virtual list, settings, sort and date menus
+    categories.ts   the one category table: filter chips, row icons and labels, the fallback to "Other"
+    CategoryIcon.tsx  the glyphs (Lucide) behind that table; CategoryFilters.tsx  the chip row
   background/     service worker: toolbar button + optional command → content script
 ```
 
@@ -62,6 +64,34 @@ Notable decisions (and where they differ from the spec's suggestions):
   - A first sync of about 10,000 chats takes a few minutes at best. Results appear progressively, and an interrupted sync resumes where it stopped.
 - **Navigation** clicks ChatGPT's own sidebar link when one exists (client-side routing). Otherwise it does a normal page load and restores the panel's query and scroll afterwards.
 - **Keyboard shortcut** is an in-page listener. The manifest command has no default key, because a suggested key would override Chrome's own ⇧⌘H (Home) in *every* tab.
+
+## Category filters and row icons
+
+`src/ui/categories.ts` is the single definition both the chips under the search box and the icon beside each row read from. The extractor assigns one of ten categories; the chips group them into eight (All plus seven) (Debugging and Security & access are listed under Engineering, Hiring & people under Other), so every chat is reachable from some chip. A category inherits its label and icon from its chip unless it names its own, so a debugging row keeps its bug icon and "Debugging" tooltip. A stored `category` that is not one of ours, or no signal at all, becomes **Other**. To add a category: add it to `related/dictionary.ts`, one row to `CATEGORIES`, and a glyph to `CategoryIcon.tsx` if it needs its own icon.
+
+- **Chips stay quiet and on one line.** No numbers on them (the count for the current search and dates is the hover text). The row scrolls sideways and never wraps; a mouse wheel over it scrolls it horizontally (a non-passive listener, so it never reaches the list or the page), an edge fades while more lies beyond it, and the selected chip is scrolled into view on open and on change.
+- **Filtering is local and cheap.** `view.ts` runs search and date first, counts the result per chip, then narrows by the selected chip. Counts therefore say what picking a chip would show. Classification is memoised per title (about 13 µs each, once).
+- **A chip is not a search.** It leaves date groups at the user's own collapse state (Today stays open), where search and date filters expand everything. "Related to this chat" stays, narrowed to the same category.
+- **The choice persists** in the `ui` storage entry next to the collapse state (`category`), and is read once at start-up (other tabs do not change it under you).
+
+### How a conversation gets its category
+
+`related/categorize.ts`, with its vocabulary in `CATEGORY_SIGNALS` / `PR_REVIEW_SIGNALS` in `related/dictionary.ts` (kept apart from `TOPICS` and `ACTIVITY_RULES`, which drive "Related to this chat": teaching the icon a word never changes what counts as related). Precedence:
+
+1. **A stored `category`** on the conversation (an import or a future manual choice) wins (`categoryFor`). It survives reloads and syncs.
+2. **Entities** the extractor recognised: a PR reference makes it a PR review; providers lean Payments; analytics tools (Mixpanel, CleverTap…) lean Analytics; other tools lean Engineering. History+ stores titles only, so there is no message content to use.
+3. **The title**, normalised (lower case, punctuation as spaces). A PR, "code review" or "review … changes/diff/commits" is a **PR review, whatever it is about**. Otherwise every category is scored by the distinct keywords it matches (weight 3 settles it, 2 is clear, 1 is a hint; the last word, which usually names the activity, tips a close call), then:
+   - Payments yields to Engineering/Debugging when the title is about building or fixing the system ("Paytm PreNotify architecture").
+   - A clear fault ("crash", "not showing", "debug") makes an engineering title Debugging.
+   - A message about hiring is People, not Writing ("Draft interview heads up").
+   - Personal topics (trip, workout, recipe…) outweigh a lone "plan" or "ideas".
+4. **Other** when the best score is under 2: one weak hint is never enough.
+
+Categories are derived when the list renders and memoised per title for the page's lifetime; they are never written to storage. A rules change therefore reaches every previously synced conversation on the next page load, with no migration and no re-sync. `tests/unit/fixtures/category-titles.ts` is the audit set (63 titles, including the ambiguous "review", "payment", "plan" and "analysis" cases); `tests/unit/categorize.test.ts` pins each one.
+
+## Time format
+
+`Settings.timeFormat` (`12h` default, `24h`) is passed down to every formatter in `utils/dates.ts` (rows, tooltips, related rows, and the dates added to ChatGPT's own sidebar). Absent or unrecognised stored values become `12h`.
 
 ## Related to this chat
 
