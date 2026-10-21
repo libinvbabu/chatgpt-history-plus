@@ -4,28 +4,41 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { expect, openPanel, panel, search, test, waitForSync } from './fixtures'
 
+/** The filter bar is chosen provisionally during the first sync; shoot the final one. */
+async function barSettled(worker: import('@playwright/test').Worker) {
+  await expect
+    .poll(() => worker.evaluate(async () => Object.entries(await chrome.storage.local.get(null)).some(([k, v]) => k.startsWith('flt:') && (v as { complete?: boolean }).complete)), { timeout: 10_000 })
+    .toBe(true)
+}
+
 test.skip(!process.env.STORE_ASSETS, 'set STORE_ASSETS=1 (npm run store-assets)')
 test.setTimeout(120_000)
 
 const out = (name: string) => resolve(import.meta.dirname, '../../store', name)
 
-test('screenshots (1280x800)', async ({ page, server }) => {
+test('screenshots (1280x800)', async ({ page, server, worker }) => {
   server.useShowcase()
   await page.setViewportSize({ width: 1280, height: 800 })
   const recent = server.byTitle('Plan the product launch checklist')
   await page.goto(`https://chatgpt.com/c/${recent.id}`)
   await openPanel(page)
   await waitForSync(page, 650)
+  await barSettled(worker)
   // The panel opens under the pointer; move it off and let hover fades finish, so no chip looks half-selected.
   await page.mouse.move(1000, 700)
   await page.waitForTimeout(300)
   await page.screenshot({ path: out('screenshot-1-timeline.png') })
 
-  await search(page).fill('roadmap')
-  await page.waitForTimeout(150)
-  await page.screenshot({ path: out('screenshot-2-search.png') })
+  // Every category, with counts, from More; Learning picked so the list behind shows it.
+  await panel(page).locator('.cats-scroll .cat-chip', { hasText: /^Learning$/ }).click()
+  await panel(page).locator('.cat-more').click()
+  await page.mouse.move(1000, 700)
+  await page.waitForTimeout(200)
+  await page.screenshot({ path: out('screenshot-2-categories.png') })
+  await page.keyboard.press('Escape')
+  await panel(page).locator('.cats-scroll .cat-chip', { hasText: /^All$/ }).click()
 
-  await search(page).fill('roadmap last month')
+  await search(page).fill('trip last month')
   await page.waitForTimeout(150)
   await page.screenshot({ path: out('screenshot-3-dates.png') })
 
@@ -61,7 +74,7 @@ test('promo tiles', async ({ page }) => {
   await page.setContent(`<style>${base}
     body{width:440px;height:280px;display:flex;flex-direction:column;justify-content:center;padding:0 40px;gap:14px}
     img{width:76px;height:76px;margin:-10px 0 0 -10px}.name{font-size:40px;line-height:1}.tag{font-size:19px;line-height:1.35;max-width:330px}
-  </style><img src="data:image/png;base64,${icon}"><div class="name">History<span class="plus">+</span></div><div class="tag">Find any ChatGPT conversation by when it happened.</div>`)
+  </style><img src="data:image/png;base64,${icon}"><div class="name">History<span class="plus">+</span></div><div class="tag">Your ChatGPT history, organized by date and topic.</div>`)
   await page.screenshot({ path: out('promo-small-440x280.png') })
 
   await page.setViewportSize({ width: 1400, height: 560 })
@@ -73,8 +86,8 @@ test('promo tiles', async ({ page }) => {
     .frame{flex:none;width:672px;height:420px;border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(10,20,70,.45);background:#fff}
     .frame img{width:1280px;transform:scale(.525);transform-origin:0 0}
   </style><div class="copy"><img class="icon" src="data:image/png;base64,${icon}"><div class="name">History<span class="plus">+</span></div>
-    <div class="tag">Your ChatGPT timeline. Browse by date, search instantly, and jump back into any conversation.</div>
-    <div class="points"><span>🕘 Dates on every chat</span><span>⚡ Instant local search</span><span>🔒 Stays on your device</span></div></div>
+    <div class="tag">Your ChatGPT timeline, organized for you. Browse by date or topic, search instantly, and jump back into any conversation.</div>
+    <div class="points"><span>🕘 Dates on every chat</span><span>🗂️ Smart categories that fit your history</span><span>⚡ Instant local search</span><span>🔒 Stays on your device</span></div></div>
     <div class="frame"><img src="data:image/png;base64,${shot}"></div>`)
   await page.screenshot({ path: out('promo-marquee-1400x560.png') })
 })

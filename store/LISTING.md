@@ -7,6 +7,8 @@ Everything the [Developer Dashboard](https://chrome.google.com/webstore/devconso
 
 To ship an update, bump the version, run `npm run zip`, and upload the new zip under **Package** for this item. Only change the fields below if the listing itself changes.
 
+**0.3.0 changes the listing:** the summary (it comes from the manifest), the description, the single-purpose and `storage` justification wording, and screenshot 2 (`screenshot-2-categories.png` replaces `screenshot-2-search.png`). No new permissions.
+
 ## Package
 
 ```bash
@@ -21,18 +23,21 @@ Upload `release/chatgpt-history-plus-<version>.zip`.
 
 **Summary** (from the manifest, 126 of 132 characters):
 
-> Browse and search your ChatGPT history by date: timestamps, date groups and instant local search. Nothing leaves your browser.
+> Browse ChatGPT history by date and smart categories that adapt to you, with instant local search. Nothing leaves your browser.
 
 **Description:**
 
 ```
-Find any old ChatGPT conversation by when it happened.
+Find any old ChatGPT conversation by when it happened, or by what it was about.
 
-You remember discussing something "around the third week of August" but not what the chat was called. ChatGPT's sidebar keeps only recent chats close at hand, and its search needs the right words. History+ adds the missing piece: time.
+You remember discussing something "around the third week of August" but not what the chat was called. ChatGPT's sidebar keeps only recent chats close at hand, and its search needs the right words. History+ adds the missing pieces: time, and order.
+
+History+ automatically organizes your ChatGPT conversations into useful categories and adapts filters to your history.
 
 WHAT YOU GET
 • Your whole history, grouped by date: Today, Yesterday, This week, Last week, then Older conversations month by month, with week and day dividers.
-• Category filters: Reviews, Engineering, Analytics, Product, Payments, Writing. A small icon on each chat shows its kind at a glance, worked out on your device from the title.
+• Smart categories for everyone: Work, Learning, Writing, Creative, Technology, Planning and Personal, with specific ones inside them such as Mathematics, Exam Prep, Travel, Cooking, Meetings, Hiring, PR Reviews and Debugging. A small icon on each chat shows its kind at a glance.
+• Filters chosen for you: a student sees Learning and their subjects, a developer Technology and PR Reviews, a parent Travel and Cooking. Nobody has to set anything up. "More" lists every category with counts; pin or hide filters any time.
 • Dates beside every conversation in ChatGPT's own sidebar.
 • Instant search that understands dates: "roadmap last month", "around sep 14", "invoice in aug", "created:2026-07".
 • Switch between Last active and Created dates; hover any chat to see both. 12- or 24-hour times.
@@ -43,6 +48,7 @@ WHAT YOU GET
 
 PRIVATE BY DESIGN
 • Reads only conversation titles, IDs and timestamps: the same list ChatGPT's sidebar shows. Never message content.
+• Categories are worked out on your device from titles, by simple rules. No AI service, no extra requests, nothing uploaded.
 • Everything stays in your browser. No servers, no analytics, no third parties.
 • Your ChatGPT session token is used in memory only and never stored.
 • Clear all local data with one click in Settings.
@@ -61,7 +67,7 @@ History+ is an independent project, not affiliated with or endorsed by OpenAI. C
 | Field | File |
 |---|---|
 | Store icon (128×128) | `../public/icons/icon-128.png` |
-| Screenshots (1280×800, upload in this order) | `screenshot-1-timeline.png`, `screenshot-2-search.png`, `screenshot-3-dates.png`, `screenshot-4-dark.png`, `screenshot-5-sidebar.png` |
+| Screenshots (1280×800, upload in this order) | `screenshot-1-timeline.png`, `screenshot-2-categories.png`, `screenshot-3-dates.png`, `screenshot-4-dark.png`, `screenshot-5-sidebar.png` |
 | Small promo tile (440×280) | `promo-small-440x280.png` |
 | Marquee promo tile (1400×560, optional) | `promo-marquee-1400x560.png` |
 
@@ -73,13 +79,13 @@ History+ is an independent project, not affiliated with or endorsed by OpenAI. C
 
 **Single purpose:**
 
-> Lets users browse and search their own ChatGPT conversation history by date and title, directly on chatgpt.com.
+> Lets users browse, search and organize their own ChatGPT conversation history by date, title and category, directly on chatgpt.com.
 
 **Permission justifications:**
 
 - **storage:**
 
-  > Stores the user's local index of ChatGPT conversation metadata (titles, IDs, timestamps) and their History+ settings on their device, so their history can be browsed and searched instantly without re-downloading it.
+  > Stores the user's local index of ChatGPT conversation metadata (titles, IDs, timestamps) and their History+ settings and category filter choices on their device, so their history can be browsed and searched instantly without re-downloading it.
 
 - **Host permission** (content script on `https://chatgpt.com/*`):
 
@@ -111,7 +117,7 @@ Paste into the "Test instructions" field if the dashboard offers it, otherwise i
 ```
 1. Sign in at https://chatgpt.com with any account (a free account works). Having a few existing conversations helps.
 2. Open History+ from the "History+" item in ChatGPT's left sidebar, with Ctrl+Shift+H (⇧⌘H on macOS), or with the toolbar icon.
-3. The panel syncs conversation titles and dates (progress is shown), then groups them by date.
+3. The panel syncs conversation titles and dates (progress is shown), then groups them by date. The filters under the search box are chosen from those titles; "More" lists every category.
 4. Type in the search box, e.g. a word from a chat title, or "last week". Click a result to open that conversation.
 5. Settings (sliders icon, top right) → "Clear local data" removes everything the extension stored.
 The extension only runs on chatgpt.com and makes requests only to chatgpt.com.

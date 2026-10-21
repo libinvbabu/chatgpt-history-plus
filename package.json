@@ -1,6 +1,6 @@
 {
   "name": "chatgpt-history-plus",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "A fast, local-first, time-first conversation history browser for ChatGPT.",
   "license": "MIT",

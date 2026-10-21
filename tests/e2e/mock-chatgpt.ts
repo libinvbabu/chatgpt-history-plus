@@ -53,6 +53,47 @@ const SHOWCASE_NAMES = [
   'PR 5150 rollback plan',
 ]
 
+/**
+ * The rest of a showcase history: what a broad, everyday user asks about, so the
+ * store screenshots show universal categories and a filter bar chosen from them.
+ */
+const SHOWCASE_POOL = [
+  'Quarterly business review slides',
+  'Agenda for the team offsite',
+  'Competitor analysis summary',
+  'Hiring plan for the design team',
+  'Weekly status update for stakeholders',
+  'Marketing campaign ideas for spring',
+  'Customer churn analysis',
+  'Interview questions for a product designer',
+  'Calculus practice problems',
+  'Photosynthesis explained simply',
+  'Spanish vocabulary for travel',
+  'History of the printing press',
+  'Exam revision schedule',
+  'Literature review outline',
+  'Weekend trip to the coast',
+  'Packing list for a hiking trip',
+  'Things to do in Lisbon',
+  'Easy weeknight dinner recipes',
+  'Sourdough starter tips',
+  'Meal prep for a busy week',
+  'Beginner running plan',
+  'Monthly household budget',
+  'Gift ideas for a friend who loves books',
+  'Thank you note to a mentor',
+  'Email to my landlord about repairs',
+  'Rewrite my professional bio',
+  'Blog post on building habits',
+  'Proofread my cover letter',
+  'Python script to rename photos',
+  'Database schema for a recipe app',
+  'Logo ideas for a bakery',
+  'Short story about a lighthouse keeper',
+  'Pros and cons of a four day week',
+  'New year goals',
+]
+
 /** Named conversations the tests look for, placed at fixed relative days. */
 export function makeDataset(total: number, now = Date.now(), showcase = false) {
   const today = new Date(now)
@@ -87,7 +128,8 @@ export function makeDataset(total: number, now = Date.now(), showcase = false) {
     const daysAgo = Math.floor(Math.pow(rand(), 2.2) * 900) + 2
     const updated = at(daysAgo, rand())
     const created = updated - Math.floor(rand() * 20) * DAY
-    const title = rand() < 0.02 ? null : `${A[Math.floor(rand() * A.length)]} ${B[Math.floor(rand() * B.length)]}`
+    // Same draws in the same order as always, so the default dataset never changes.
+    const title = rand() < 0.02 ? null : showcase ? SHOWCASE_POOL[Math.floor(rand() * SHOWCASE_POOL.length)]! : `${A[Math.floor(rand() * A.length)]} ${B[Math.floor(rand() * B.length)]}`
     // Mix numeric and ISO timestamps, as the real API has done.
     const fmt = (ms: number) => (n % 3 === 0 ? ms / 1000 : iso(ms))
     items.push({ id: uuid(++n), title, create_time: fmt(created), update_time: fmt(updated) })
