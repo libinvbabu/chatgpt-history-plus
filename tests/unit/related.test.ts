@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { emptyIndex, type HistoryIndex } from '../../src/history/types'
-import { categoryForTitle, extract } from '../../src/related/extract'
+import { classifyTitle } from '../../src/related/classify'
+import { extract } from '../../src/related/extract'
 import { RelatedEngine, signalsFromText } from '../../src/related/engine'
 import { stem } from '../../src/related/text'
 
@@ -91,19 +92,12 @@ describe('extraction', () => {
     expect(stem('बिल')).toBe('बिल') // non-Latin words pass through
   })
 
-  it('classifies one category per title, falling back to general', () => {
-    const c = categoryForTitle
-    expect(c('Review Paytm Autopay PR')).toBe('code-review')
-    expect(c('Debug flaky login test')).toBe('debugging')
-    expect(c('Paytm settlement reconciliation')).toBe('payments')
-    expect(c('Weekly retention dashboard')).toBe('analytics')
-    expect(c('Interview questions for backend hiring')).toBe('people')
-    expect(c('Read Only Access Request')).toBe('security')
-    expect(c('Postgres index tuning')).toBe('engineering')
-    expect(c('Product roadmap brainstorm')).toBe('product')
-    expect(c('Draft email to investors')).toBe('writing')
-    expect(c('Improving Team Communication')).toBe('general')
-    expect(c('')).toBe('general')
+  it('classification lives apart from extraction: the category is not an extracted signal', () => {
+    // The icon and filters come from classify.ts; extract() feeds the related engine and carries no category.
+    expect(extract('Review Paytm Autopay PR')).not.toHaveProperty('category')
+    expect(classifyTitle('Review Paytm Autopay PR')).toMatchObject({ primary: 'technology', sub: 'pr-reviews' })
+    expect(classifyTitle('Paytm settlement reconciliation')).toMatchObject({ primary: 'work', sub: 'payments' })
+    expect(classifyTitle('')).toMatchObject({ primary: 'general', sub: null })
   })
 })
 
@@ -359,6 +353,34 @@ describe('content-aware matching (for a future capture or import)', () => {
 })
 
 describe('performance', () => {
+  it('never relates two chats only because they share a broad category', () => {
+    // Pairs filed under the same primary (and often the same subcategory) with no specific subject in common.
+    const pairs: Array<[string, string]> = [
+      ['Explain photosynthesis for class 8', 'Calculus derivatives practice'], // both Learning
+      ['Plan a family trip to Kerala', 'Easy dinner recipes for kids'], // both Personal
+      ['Weekend trip itinerary ideas', 'Visa requirements for Japan'], // both Personal · Travel
+      ['Agenda for Monday leadership meeting', 'Competitor analysis for our SaaS'], // both Work
+      ['Quarterly OKR planning', 'Marketing campaign for Diwali sale'], // both Work
+      ['Logo design for my bakery', 'Short story about a lost robot'], // both Creative
+      ['Kubernetes autoscaling config', 'Postgres index tuning'], // both Technology
+      ['Debug flaky login test', 'Fix NullPointerException in OrderService'], // both Technology · Debugging
+    ]
+    for (const [a, b] of pairs) {
+      expect(classifyTitle(a).primary, `${a} / ${b}`).toBe(classifyTitle(b).primary)
+      const { titles } = setup(a, [[b, 2]])
+      expect(titles, `${a} ↔ ${b}`).not.toContain(b)
+    }
+  })
+
+  it('still relates chats about the same PR, and ranks the same entity above the same category', () => {
+    const { titles } = setup('Review Paytm Autopay PR #4294', [
+      ['Autopay PR 4294 hotfix', 2],
+      ['Review Razorpay settlement PR #5150', 3], // same subcategory (PR Reviews), different PR
+    ])
+    expect(titles[0]).toBe('Autopay PR 4294 hotfix')
+    expect(titles).not.toContain('Review Razorpay settlement PR #5150')
+  })
+
   it('indexes 10,000 titles and answers quickly', () => {
     const subjects = ['paytm', 'phonepe', 'razorpay', 'postgres', 'redis', 'kafka', 'hiring', 'analytics', 'roadmap', 'onboarding', 'pricing', 'checkout']
     const things = ['autopay mandate', 'webhook retries', 'settlement report', 'index tuning', 'eviction policy', 'consumer lag', 'interview loop', 'funnel dashboard', 'launch plan', 'refund flow', 'api errors', 'schema migration']

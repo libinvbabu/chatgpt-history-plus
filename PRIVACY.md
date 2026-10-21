@@ -15,6 +15,10 @@ When you use History+ on chatgpt.com, it requests your conversation list from Ch
 
 It does **not** read message content, prompts, responses, files, or account details.
 
+## Categories and filters
+
+Each conversation's category (for example Learning · Mathematics or Technology · PR Reviews) is worked out on your device from its title, using fixed word lists and rules. No AI service is involved, no request is made, and categories are not written to storage. History+ stores only your filter bar choices for each account: which filters it picked from your history, plus any you pinned or hid. These are category names and counts, never titles, and they are removed with everything else when you clear local data.
+
 ## Related conversations
 
 The "Related to this chat" section is computed on your device from the titles and timestamps above, using fixed rules (shared PR numbers, repositories, tickets, tool and provider names, and distinctive words). It runs in memory each time a page loads, is never written to storage, and makes no network or AI calls, so it adds nothing to what is stored and is removed with everything else when you clear local data or sign out.
@@ -23,7 +27,7 @@ To make those requests, History+ uses ChatGPT's short-lived session token. The t
 
 ## Where it is stored
 
-In your browser's extension storage (`chrome.storage.local`) on this device only, together with your History+ settings (date display, grouping, collapsed groups) and sync pacing. The cache is keyed by a one-way hash of your account and workspace, so different accounts never share a cache.
+In your browser's extension storage (`chrome.storage.local`) on this device only, together with your History+ settings (date display, grouping, collapsed groups), your category filter choices and sync pacing. The cache is keyed by a one-way hash of your account and workspace, so different accounts never share a cache.
 
 ## What is sent anywhere
 

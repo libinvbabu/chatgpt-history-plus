@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Page, Worker } from '@playwright/test'
 import { accountKey, expect, openPanel, panel, rows, search, test, waitForSync } from './fixtures'
 
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control'
@@ -476,14 +476,19 @@ test.describe('History+', () => {
     expect(Math.abs(m[0]!.catLeft - m[1]!.catLeft)).toBeLessThan(1) // icons line up
     expect(Math.abs(m[0]!.titleLeft - m[1]!.titleLeft)).toBeLessThan(1)
     // Category name on hover (the icon), full title and timestamps on the row.
-    await expect(todays.filter({ hasText: 'Investigate Meta sync failure' }).locator('.cat')).toHaveAttribute('title', 'Debugging')
-    await expect(todays.filter({ hasText: 'Review duplicate Paytm debit query' }).locator('.cat')).toHaveAttribute('title', 'Payments')
+    await expect(todays.filter({ hasText: 'Investigate Meta sync failure' }).locator('.cat')).toHaveAttribute('title', 'Technology · Debugging')
+    await expect(todays.filter({ hasText: 'Review duplicate Paytm debit query' }).locator('.cat')).toHaveAttribute('title', 'Work · Payments')
     await expect(todays.first()).toHaveAttribute('title', /Created: .*\nLast active: /)
   })
 
-  const chip = (page: Page, label: string) => panel(page).locator('.cat-chip', { hasText: new RegExp(`^${label}`) })
+  /** A chip in the filter row (not More). */
+  const chip = (page: Page, label: string) => panel(page).locator('.cats-scroll .cat-chip', { hasText: new RegExp(`^${label}$`) })
+  const chipLabels = (page: Page) => panel(page).locator('.cats-scroll .cat-chip > span').allTextContents()
+  const more = (page: Page) => panel(page).locator('.cat-more')
+  const menuItem = (page: Page, label: string) => panel(page).locator('.cat-menu .cat-item').filter({ has: page.locator('.label', { hasText: new RegExp(`^${label}$`) }) })
   /** Chips carry no numbers; the count is in the hover text ("12 chats"). */
   const chipCount = async (page: Page, label: string) => Number((await chip(page, label).getAttribute('title'))!.replace(/[^\d]/g, ''))
+  const menuCount = async (page: Page, label: string) => Number((await menuItem(page, label).locator('.n').textContent())!.replace(/[^\d]/g, ''))
   const sortBy = async (page: Page, name: 'Last active' | 'Created') => {
     await panel(page).locator('.sort-chip').click()
     await panel(page).getByRole('menuitemradio', { name }).click()
@@ -493,32 +498,50 @@ test.describe('History+', () => {
     panel(page)
       .locator('.list .group[data-level="0"]:not(.related-head) .n')
       .evaluateAll((els) => els.reduce((sum, e) => sum + Number((e.textContent ?? '0').replace(/,/g, '')), 0))
-
-  test('category chips: one row under the search that scrolls sideways, All selected, no numbers', async ({ page }) => {
+  /** The filter bar is chosen provisionally while the first sync runs; wait for the final choice. */
+  const barSettled = async (worker: Worker) =>
+    expect
+      .poll(() => worker.evaluate(async () => Object.entries(await chrome.storage.local.get(null)).some(([k, v]) => k.startsWith('flt:') && (v as { complete?: boolean }).complete)), { timeout: 10_000 })
+      .toBe(true)
+  const ready = async (page: Page, worker: Worker) => {
     await page.goto('https://chatgpt.com/')
     await openPanel(page)
     await waitForSync(page, 650)
-    const labels = await panel(page).locator('.cat-chip > span').allTextContents()
-    expect(labels).toEqual(['All', 'Reviews', 'Engineering', 'Analytics', 'Product', 'Payments', 'Writing', 'Other'])
+    await barSettled(worker)
+  }
+
+  test('filter bar: All, filters chosen from this history, then More; one row that scrolls sideways; no numbers', async ({ page, worker }) => {
+    await ready(page, worker)
+    const labels = await chipLabels(page)
+    expect(labels[0]).toBe('All')
+    expect(labels.length).toBeGreaterThanOrEqual(4)
+    expect(labels.length).toBeLessThanOrEqual(6) // All + up to five
+    // This mock history is mostly engineering, with some product, personal and writing chats. Once the
+    // first sync is complete the choice is made afresh, so it does not depend on how the pages arrived.
+    expect(labels).toEqual(['All', 'Technology', 'Debugging', 'Personal', 'Work', 'Writing'])
+    expect(labels).not.toContain('General')
+    expect(labels.filter((l) => ['Technology', 'Debugging', 'Backend', 'Architecture', 'Frontend', 'Infrastructure'].includes(l)).length).toBeLessThanOrEqual(3) // no family fills the bar
+    expect(labels.some((l) => ['Personal', 'Work', 'Writing', 'Travel', 'Product'].includes(l))).toBe(true)
     await expect(chip(page, 'All')).toHaveAttribute('aria-pressed', 'true')
     await expect(panel(page).locator('.cat-chip[aria-pressed="true"]')).toHaveCount(1)
-    await expect(chip(page, 'Engineering')).toHaveAttribute('title', /^\d[\d,]* chats?$/)
+    await expect(chip(page, 'Technology')).toHaveAttribute('title', /^\d[\d,]* chats?$/)
+    await expect(more(page)).toBeInViewport({ ratio: 1 })
+    await expect(panel(page).locator('.cats-scroll .cat-more')).toHaveCount(0) // More stays put, outside the scrolling part
 
     const m = await panel(page).evaluate((root) => {
       const scroller = root.querySelector<HTMLElement>('.cats-scroll')!
-      const chips = [...root.querySelectorAll<HTMLElement>('.cat-chip')]
+      const chips = [...root.querySelectorAll<HTMLElement>('.cats .cat-chip')]
       const search = root.querySelector('.search')!.getBoundingClientRect()
       const box = scroller.getBoundingClientRect()
       const cs = getComputedStyle(chips[1]!)
       return {
         lines: new Set(chips.map((c) => Math.round(c.getBoundingClientRect().top))).size,
         digits: chips.some((c) => /\d/.test(c.textContent ?? '')),
-        icons: [...new Set(chips.map((c) => c.querySelector('svg')!.getBoundingClientRect().width))],
+        icons: [...new Set([...scroller.querySelectorAll('.cat-chip svg')].map((s) => s.getBoundingClientRect().width))],
         scrolls: scroller.scrollWidth > scroller.clientWidth,
         scrollbar: getComputedStyle(scroller).scrollbarWidth,
         overscroll: getComputedStyle(scroller).overscrollBehaviorX,
         belowSearch: box.top >= search.bottom && box.top - search.bottom <= 16,
-        hidden: chips.filter((c) => c.getBoundingClientRect().right > box.right).map((c) => c.textContent),
         pageOverflow: root.scrollWidth > root.clientWidth,
         height: chips[0]!.getBoundingClientRect().height,
         gap: chips[1]!.getBoundingClientRect().left - chips[0]!.getBoundingClientRect().right,
@@ -527,11 +550,10 @@ test.describe('History+', () => {
         shadow: cs.boxShadow,
       }
     })
-    expect(m.lines).toBe(1) // never wraps
+    expect(m.lines).toBe(1) // never wraps, More included
     expect(m.digits).toBe(false)
     expect(m.icons).toEqual([14])
     expect(m.scrolls).toBe(true)
-    expect(m.hidden).toContain('Other') // reached by scrolling
     expect(m.scrollbar).toBe('none')
     expect(m.overscroll).toBe('contain') // a swipe past the end is not browser back/forward
     expect(m.belowSearch).toBe(true)
@@ -553,77 +575,84 @@ test.describe('History+', () => {
     // A mouse wheel over the chips scrolls them sideways, and nothing else.
     const listTop = () => panel(page).locator('.list').evaluate((el) => el.scrollTop)
     const before = await listTop()
-    await chip(page, 'Engineering').hover()
+    await chip(page, 'Technology').hover()
     await page.mouse.wheel(0, 400)
     await expect.poll(() => panel(page).locator('.cats-scroll').evaluate((el) => el.scrollLeft)).toBeGreaterThan(0)
     expect(await listTop()).toBe(before)
-    await expect(chip(page, 'Other')).toBeInViewport({ ratio: 1 })
+    await expect(chip(page, labels.at(-1)!)).toBeInViewport({ ratio: 1 })
     await expect(cats).toHaveAttribute('data-fade-start', 'true')
     await expect(cats).not.toHaveAttribute('data-fade-end', /.*/)
   })
 
-  test('picking a category filters the list; counts add up; the same chip again returns to All', async ({ page }) => {
-    await page.goto('https://chatgpt.com/')
-    await openPanel(page)
-    await waitForSync(page, 650)
+  test('picking a filter narrows the list; primaries add up to everything; the same chip again returns to All', async ({ page, worker }) => {
+    await ready(page, worker)
     const count = panel(page).locator('.count')
 
-    // Each conversation lands under exactly one chip: the counts add up to everything.
-    const names = ['Reviews', 'Engineering', 'Product', 'Payments', 'Writing', 'Other']
+    // Each conversation has exactly one primary category: their counts in More add up to everything.
+    await more(page).click()
+    const primaries = ['Work', 'Learning', 'Writing', 'Creative', 'Technology', 'Planning', 'Personal', 'General']
     let sum = 0
-    for (const n of names) sum += await chipCount(page, n)
+    for (const p of primaries) sum += await menuCount(page, p)
     expect(sum).toBe(650)
+    await page.keyboard.press('Escape')
+    await expect(panel(page).locator('.cat-menu')).toHaveCount(0)
+    await expect(panel(page)).toBeVisible() // Escape closed only the menu
 
-    await chip(page, 'Payments').click()
-    const payments = await chipCount(page, 'Payments')
-    expect(payments).toBeGreaterThan(0)
-    await expect(chip(page, 'Payments')).toHaveAttribute('aria-pressed', 'true')
+    // A primary: everything filed under it.
+    await chip(page, 'Technology').click()
+    const tech = await chipCount(page, 'Technology')
+    expect(tech).toBeGreaterThan(0)
+    await expect(chip(page, 'Technology')).toHaveAttribute('aria-pressed', 'true')
     await expect(chip(page, 'All')).toHaveAttribute('aria-pressed', 'false')
-    await expect(count).toHaveText(`${payments} of 650`)
-    // Date-group counts reflect the filter too: they add up to the chip.
-    expect(await groupTotal(page)).toBe(payments)
-    // Every row that is showing is a payments row (Today is open; the rest are collapsed).
-    await expect(rows(page)).toHaveCount(1)
-    await expect(rows(page).first().locator('.title')).toHaveText('Review duplicate Paytm debit query')
-    await expect(rows(page).first().locator('.cat')).toHaveAttribute('data-category', 'payments')
-
-    // Open collapsed groups (Older holds months) until older chats show: still only payments rows, each with its icon.
-    for (let i = 0; i < 3 && (await rows(page).count()) < 2; i++) await panel(page).locator('.list .group[aria-expanded="false"]').first().click()
+    await expect(count).toHaveText(`${tech} of 650`)
+    expect(await groupTotal(page)).toBe(tech) // date-group counts reflect the filter too
+    for (let i = 0; i < 3 && (await rows(page).count()) < 3; i++) await panel(page).locator('.list .group[aria-expanded="false"]').first().click()
     const kinds = await rows(page).evaluateAll((els) => els.map((e) => e.querySelector('.cat')!.getAttribute('data-category')))
     expect(kinds.length).toBeGreaterThan(1)
-    expect(new Set(kinds)).toEqual(new Set(['payments']))
+    expect(new Set(kinds)).toEqual(new Set(['technology']))
+
+    // A subcategory: only that part of it.
+    await chip(page, 'Debugging').click()
+    const debugging = await chipCount(page, 'Debugging')
+    expect(debugging).toBeLessThan(tech)
+    await expect(count).toHaveText(`${debugging} of 650`)
+    const subs = await rows(page).evaluateAll((els) => els.map((e) => e.querySelector('.cat')!.getAttribute('data-sub')))
+    expect(new Set(subs)).toEqual(new Set(['debugging']))
 
     // The chip again: back to All, and nothing else was reset.
-    await chip(page, 'Payments').click()
+    await chip(page, 'Debugging').click()
     await expect(chip(page, 'All')).toHaveAttribute('aria-pressed', 'true')
-    await expect(count).toHaveText('650')
-    await chip(page, 'Engineering').click()
-    await chip(page, 'All').click()
     await expect(count).toHaveText('650')
   })
 
-  test('category works with search, date and sorting, and switching it keeps them', async ({ page }) => {
-    await page.goto('https://chatgpt.com/')
-    await openPanel(page)
-    await waitForSync(page, 650)
+  test('filters work with search, date and sorting, and switching keeps them', async ({ page, worker, server }) => {
+    await ready(page, worker)
     const count = panel(page).locator('.count')
+    const requests = server.apiRequests().length
 
-    // Search: chip counts follow the matches, and the selected chip narrows them further.
+    // Search: counts follow the matches, and the selected filter narrows them further.
     await search(page).fill('paytm')
     await expect(count).toHaveText(/^\d+ of 650$/)
     const matches = Number((await count.textContent())!.split(' ')[0])
-    // Paytm chats are payments chats, except the architecture one, which is engineering work.
-    expect(await chipCount(page, 'Payments')).toBe(matches - 1)
-    expect(await chipCount(page, 'Engineering')).toBe(1)
-    expect(await chipCount(page, 'Writing')).toBe(0)
-    await expect(chip(page, 'Writing')).toHaveAttribute('data-empty', 'true')
-    await chip(page, 'Payments').click()
+    // Paytm chats are payments work, except the architecture one, which is technology.
+    expect(await chipCount(page, 'Technology')).toBe(1)
+    await more(page).click()
+    expect(await menuCount(page, 'Payments')).toBe(matches - 1)
+    expect(await menuCount(page, 'Work')).toBe(matches - 1)
+    // A filter from More joins the row while it is selected.
+    await menuItem(page, 'Payments').click()
+    await expect(panel(page).locator('.cat-menu')).toHaveCount(0)
+    await expect(chip(page, 'Payments')).toHaveAttribute('aria-pressed', 'true')
+    await expect(chip(page, 'Payments')).toHaveAttribute('data-extra', 'true')
+    await expect(chip(page, 'Payments')).toBeInViewport({ ratio: 1 })
     await expect(count).toHaveText(`${matches - 1} of 650`)
     await expect(search(page)).toHaveValue('paytm') // switching did not reset the query
 
-    // Sorting is independent of the chip.
+    // Sorting is independent of the filter.
     await sortBy(page, 'Created')
-    await chip(page, 'Writing').click()
+    await more(page).click()
+    await expect(menuItem(page, 'Writing')).toHaveAttribute('data-empty', 'true')
+    await menuItem(page, 'Writing').click()
     await expect(panel(page).locator('.sort-chip')).toHaveText('Created')
     await expect(search(page)).toHaveValue('paytm')
     await expect(rows(page)).toHaveCount(0)
@@ -631,60 +660,152 @@ test.describe('History+', () => {
     // The empty state says why and offers the way out.
     await panel(page).getByRole('button', { name: 'Show all categories' }).click()
     await expect(chip(page, 'All')).toHaveAttribute('aria-pressed', 'true')
+    await expect(chip(page, 'Payments')).toHaveCount(0) // it left the row with the selection
     await expect(count).toHaveText(`${matches} of 650`)
 
-    // Date filter: Today holds one debugging (engineering) chat and one payments chat.
+    // Date filter: Today holds one technology (debugging) chat and one payments chat.
     await search(page).fill('')
     await panel(page).getByRole('button', { name: 'All dates' }).click()
     await panel(page).getByRole('menuitemradio', { name: 'Today' }).click()
     await expect(count).toHaveText('2 of 650')
-    expect(await chipCount(page, 'Engineering')).toBe(1)
-    expect(await chipCount(page, 'Payments')).toBe(1)
-    expect(await chipCount(page, 'Writing')).toBe(0)
-    await chip(page, 'Engineering').click()
+    expect(await chipCount(page, 'Technology')).toBe(1)
+    await chip(page, 'Technology').click()
     await expect(count).toHaveText('1 of 650')
     await expect(rows(page)).toHaveCount(1)
     await expect(rows(page).first().locator('.title')).toHaveText('Investigate Meta sync failure')
     await expect(panel(page).locator('.date-chip')).toContainText('Today') // the date filter is still on
+
+    // Categorising is local: none of this asked ChatGPT for anything.
+    expect(server.apiRequests().length).toBe(requests)
   })
 
-  test('the selected category is remembered: reopening the panel, and reloading the page', async ({ page }) => {
-    await page.goto('https://chatgpt.com/')
+  test('More: every category, grouped, with counts; find one by name; keyboard friendly', async ({ page, worker }) => {
+    await ready(page, worker)
+    await more(page).click()
+    const menu = panel(page).locator('.cat-menu')
+    await expect(menu).toHaveAttribute('role', 'dialog')
+    await expect(menu.locator('.cat-menu-search input')).toBeFocused()
+
+    // Primaries in a fixed order, always listed; subcategories under them, only those this history has.
+    const top = await menu.locator('.cat-item[data-level="0"] .label').allTextContents()
+    expect(top).toEqual(['Work', 'Learning', 'Writing', 'Creative', 'Technology', 'Planning', 'Personal', 'General'])
+    await expect(menuItem(page, 'PR Reviews')).toHaveAttribute('data-level', '1')
+    await expect(menuItem(page, 'Mathematics')).toHaveCount(0) // nobody here does maths
+    const order = await menu.locator('.cat-item .label').allTextContents()
+    expect(order.indexOf('PR Reviews')).toBeGreaterThan(order.indexOf('Technology'))
+    expect(order.indexOf('PR Reviews')).toBeLessThan(order.indexOf('Planning'))
+    // The list scrolls inside the menu; the menu stays inside the panel.
+    const fits = await panel(page).evaluate((root) => {
+      const m = root.querySelector('.cat-menu')!.getBoundingClientRect()
+      const p = root.getBoundingClientRect()
+      return m.left >= p.left && m.right <= p.right && m.bottom <= p.bottom
+    })
+    expect(fits).toBe(true)
+
+    // Find by name; a subcategory says which primary it belongs to.
+    await page.keyboard.type('trav')
+    await expect(menu.locator('.cat-item')).toHaveCount(1)
+    await expect(menuItem(page, 'Travel').locator('.in')).toHaveText('Personal')
+    await page.keyboard.type('elzzz')
+    await expect(menu.locator('.cat-menu-empty')).toBeVisible()
+    await menu.locator('input').fill('')
+
+    // Opened with a filter selected, the list starts at it.
+    await page.keyboard.press('Escape')
+    await chip(page, 'Writing').click()
+    await more(page).click()
+    await expect(menuItem(page, 'Writing')).toBeInViewport({ ratio: 1 })
+    await menuItem(page, 'Writing').click() // picking the selected one again clears it
+    await expect(chip(page, 'All')).toHaveAttribute('aria-pressed', 'true')
+    await more(page).click()
+
+    // Arrows move from the search box into the list; Enter picks and closes; focus returns to More.
+    await page.keyboard.press('ArrowDown')
+    await expect(menuItem(page, 'Work')).toBeFocused()
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+    await expect(menu).toHaveCount(0)
+    const picked = await panel(page).locator('.cat-chip[aria-pressed="true"]').textContent()
+    expect(picked).not.toBe('All')
+    await expect(more(page)).toBeFocused()
+  })
+
+  test('customize: pin, hide and reset filters; the choice survives a reload', async ({ page, worker }) => {
+    await ready(page, worker)
+    const auto = await chipLabels(page)
+    const victim = auto[2]! // an automatic filter to hide
+    await more(page).click()
+    await panel(page).getByRole('button', { name: 'Customize filters' }).click()
+    await expect(panel(page).locator('.cat-menu')).toHaveAttribute('aria-label', 'Customize filters')
+    await panel(page).getByRole('button', { name: 'Pin Travel' }).click()
+    await panel(page).getByRole('button', { name: `Hide ${victim}` }).click()
+    await expect(menuItem(page, 'Travel').locator('.cat-status')).toHaveText('Pinned')
+    await expect(menuItem(page, victim).locator('.cat-status')).toHaveText('Hidden')
+    await panel(page).getByRole('button', { name: 'Done' }).click()
+    await page.keyboard.press('Escape')
+
+    // Pinned first; the hidden one gone; still one row.
+    const labels = await chipLabels(page)
+    expect(labels[1]).toBe('Travel')
+    expect(labels).not.toContain(victim)
+    expect(labels.length).toBeLessThanOrEqual(6)
+
+    await page.reload()
     await openPanel(page)
-    await waitForSync(page, 650)
-    await chip(page, 'Other').click()
-    await expect(chip(page, 'Other')).toHaveAttribute('aria-pressed', 'true')
+    await expect.poll(() => chipLabels(page)).toEqual(labels)
+
+    // Reset: back to the automatic choice.
+    await more(page).click()
+    await panel(page).getByRole('button', { name: 'Customize filters' }).click()
+    await panel(page).getByRole('button', { name: 'Reset to automatic' }).click()
+    await page.keyboard.press('Escape')
+    await expect.poll(() => chipLabels(page)).toEqual(auto)
+  })
+
+  test('the selected filter is remembered: reopening the panel, and reloading the page', async ({ page, worker }) => {
+    await ready(page, worker)
+    await more(page).click()
+    await menuItem(page, 'General').click()
+    await expect(chip(page, 'General')).toHaveAttribute('aria-pressed', 'true')
 
     await page.keyboard.press('Escape') // search is empty, so this closes the panel
     await expect(panel(page)).toHaveCount(0)
     await openPanel(page)
-    await expect(chip(page, 'Other')).toHaveAttribute('aria-pressed', 'true')
+    await expect(chip(page, 'General')).toHaveAttribute('aria-pressed', 'true')
     await expect(panel(page).locator('.count')).toHaveText(/^\d+ of 650$/)
 
     await page.waitForTimeout(400) // debounced save
     await page.reload()
     await openPanel(page)
-    await expect(chip(page, 'Other')).toHaveAttribute('aria-pressed', 'true')
+    await expect(chip(page, 'General')).toHaveAttribute('aria-pressed', 'true')
     // Reopened with the chip scrolled into view, not left behind the fade.
-    await expect(chip(page, 'Other')).toBeInViewport({ ratio: 1 })
+    await expect(chip(page, 'General')).toBeInViewport({ ratio: 1 })
   })
 
-  test('chips are keyboard reachable: one tab stop, arrows move, Enter picks', async ({ page }) => {
-    await page.goto('https://chatgpt.com/')
+  test('a filter remembered by History+ 0.2 is carried over to its new name', async ({ page, worker }) => {
+    await ready(page, worker)
+    await worker.evaluate(() => chrome.storage.local.set({ ui: { category: 'engineering', collapsed: {} } }))
+    await page.reload()
     await openPanel(page)
-    await waitForSync(page, 650)
+    await expect(chip(page, 'Technology')).toHaveAttribute('aria-pressed', 'true')
+    await expect(panel(page).locator('.count')).toHaveText(/^\d+ of 650$/) // no re-sync needed: categories come from titles already stored
+  })
+
+  test('chips are keyboard reachable: one tab stop, arrows move, Enter picks', async ({ page, worker }) => {
+    await ready(page, worker)
+    const labels = await chipLabels(page)
     await chip(page, 'All').focus()
     await page.keyboard.press('ArrowRight')
-    await expect(chip(page, 'Reviews')).toBeFocused()
+    await expect(chip(page, labels[1]!)).toBeFocused()
     await page.keyboard.press('End')
-    await expect(chip(page, 'Other')).toBeFocused()
-    await expect(chip(page, 'Other')).toBeInViewport({ ratio: 1 }) // focus scrolls it into view
+    await expect(chip(page, labels.at(-1)!)).toBeFocused()
+    await expect(chip(page, labels.at(-1)!)).toBeInViewport({ ratio: 1 }) // focus scrolls it into view
     await page.keyboard.press('Enter')
-    await expect(chip(page, 'Other')).toHaveAttribute('aria-pressed', 'true')
+    await expect(chip(page, labels.at(-1)!)).toHaveAttribute('aria-pressed', 'true')
     await page.keyboard.press('Home')
     await expect(chip(page, 'All')).toBeFocused()
     // Only the selected chip is in the tab order.
-    const tabbable = await panel(page).locator('.cat-chip').evaluateAll((els) => els.filter((e) => (e as HTMLElement).tabIndex >= 0).length)
+    const tabbable = await panel(page).locator('.cats-scroll .cat-chip').evaluateAll((els) => els.filter((e) => (e as HTMLElement).tabIndex >= 0).length)
     expect(tabbable).toBe(1)
   })
 

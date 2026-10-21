@@ -2,9 +2,12 @@
 // title (or, later, any text a content source provides), pull out the things
 // that make two conversations about the same *thing* rather than the same *kind
 // of thing*: PRs, repositories, tickets, providers, tools, topics, activity.
+//
+// Categories (the icon and filters) are not extracted here: classify.ts reads
+// the entities found here, but nothing here reads a category, so the related
+// engine never sees one.
 
-import { categorize } from './categorize'
-import { ACTIVITY_RULES, CATEGORY_LABELS, TOPICS, entityMatcher, type Activity, type CategoryId, type EntityType } from './dictionary'
+import { ACTIVITY_RULES, TOPICS, entityMatcher, type Activity, type EntityType } from './dictionary'
 import { stem, tokenize, isGeneric } from './text'
 
 export interface Entity {
@@ -20,7 +23,6 @@ export interface Extracted {
   /** Canonical topic ids ("subscriptions"). Never broad areas like "engineering". */
   topics: string[]
   activity: Activity | null
-  category: CategoryId
   /** Unique significant stems, minus single-word entity names (those are entities). */
   stems: string[]
   /** Unordered adjacent pairs of significant stems. */
@@ -119,34 +121,8 @@ export function extract(text: string): Extracted {
     entities,
     topics: uniqueTopics,
     activity,
-    category: categorize(text, entities),
     stems,
     bigrams: [...new Set(bigrams)],
     keywords: stems.filter((s) => !isGeneric(s)),
   }
-}
-
-// ---------------------------------------------------------------------------
-// Category lookups for the UI: one per conversation row, so memoised by title.
-
-const categoryCache = new Map<string, CategoryId>()
-
-export function categoryForTitle(title: string): CategoryId {
-  let c = categoryCache.get(title)
-  if (!c) {
-    if (categoryCache.size > 20_000) categoryCache.clear()
-    c = title.trim() ? extract(title).category : 'general'
-    categoryCache.set(title, c)
-  }
-  return c
-}
-
-export const categoryLabel = (c: CategoryId): string => CATEGORY_LABELS[c]
-
-// Own keys only: `in` would accept "toString" and friends from the prototype chain.
-export const isCategoryId = (v: unknown): v is CategoryId => typeof v === 'string' && Object.hasOwn(CATEGORY_LABELS, v)
-
-/** A stored category if something supplied a valid one, else the title rules. One place to change. */
-export function categoryFor(conv: { title: string; category?: string | null }): CategoryId {
-  return isCategoryId(conv.category) ? conv.category : categoryForTitle(conv.title)
 }

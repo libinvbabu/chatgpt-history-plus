@@ -2,6 +2,7 @@ import type { ProviderStatus, HistoryIndex, Settings } from '../history/types'
 import { DEFAULT_SETTINGS } from '../history/types'
 import type { SyncDiagnostics, SyncMode } from '../history/sync'
 import type { FilterId } from '../ui/categories'
+import { emptyFilterPrefs, type FilterPrefs } from '../ui/personalize'
 import type { Theme } from './theme'
 
 export type PresetId = 'today' | 'yesterday' | 'this-week' | 'last-week' | 'last-7' | 'last-30' | 'this-month' | 'last-month' | 'this-year'
@@ -50,8 +51,10 @@ export interface AppState {
   query: string
   literal: boolean
   dateFilter: DateFilter | null
-  /** The category chip that is selected. Remembered across reopening and reloads. */
+  /** The category filter that is selected. Remembered across reopening and reloads. */
   category: FilterId
+  /** This account's filter bar: pinned and hidden filters, and the automatic choice. */
+  filterPrefs: FilterPrefs
   currentId: string | null
   theme: Theme
   /** Bumped to ask the search box to take focus. */
@@ -92,6 +95,7 @@ export function initialState(): AppState {
     literal: false,
     dateFilter: null,
     category: 'all',
+    filterPrefs: emptyFilterPrefs(),
     currentId: null,
     theme: 'light',
     focusRequest: 0,

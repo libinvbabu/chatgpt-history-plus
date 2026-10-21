@@ -59,3 +59,42 @@ test('capture', async ({ page }) => {
   await page.waitForTimeout(200)
   await page.screenshot({ path: `${dir}/11-narrow.png` })
 })
+
+test('capture categories', async ({ page, server }) => {
+  const recent = server.byTitle('Investigate Meta sync failure')
+  await page.goto(`https://chatgpt.com/c/${recent.id}`)
+  await openPanel(page)
+  await waitForSync(page, 650)
+  await page.waitForTimeout(1200) // the filter bar's final choice lands just after the first sync
+  const shot = (name: string) => page.screenshot({ path: `${dir}/c-${name}.png` })
+  await page.mouse.move(1000, 700)
+  await shot('1-bar-light')
+  await panel(page).locator('.cat-more').click()
+  await shot('2-more-light')
+  await panel(page).getByRole('button', { name: 'Customize filters' }).click()
+  await shot('3-customize-light')
+  await page.keyboard.press('Escape')
+  await panel(page).locator('.cats-scroll .cat-chip', { hasText: /^Debugging$/ }).click()
+  await shot('4-subcategory-selected')
+  await panel(page).locator('.cats-scroll .cat-chip', { hasText: /^All$/ }).click()
+
+  // 24-hour clock from Settings, with the open chat highlighted.
+  await panel(page).getByRole('button', { name: 'Settings' }).click()
+  await panel(page).getByText('24-hour').click()
+  await shot('5-settings')
+  await panel(page).getByRole('button', { name: 'Back' }).click()
+  await shot('6-24h')
+
+  await page.evaluate(() => document.documentElement.classList.replace('light', 'dark'))
+  await shot('7-bar-dark')
+  await panel(page).locator('.cat-more').click()
+  await shot('8-more-dark')
+  await page.keyboard.press('Escape')
+
+  for (const width of [900, 375]) {
+    await page.setViewportSize({ width, height: 760 })
+    await page.waitForTimeout(250)
+    if (!(await panel(page).isVisible())) await openPanel(page)
+    await shot(`9-width-${width}`)
+  }
+})

@@ -9,7 +9,7 @@ import { buildRelatedRows, type RelatedEntry } from '../history/related-rows'
 import { inRanges, makeSearchDoc, matches, parseQuery, type FieldRange, type ParsedQuery, type SearchDoc } from '../history/search'
 import { effectiveTime, type HistoryIndex, type Settings, type StoredConversation } from '../history/types'
 import type { DateFilter, PresetId } from '../content/store'
-import { filterFor, FILTERS, type CategoryFilterId, type FilterId } from './categories'
+import { classificationOf, matchesFilter, type FilterId } from './categories'
 
 export const PRESETS: Array<{ id: PresetId; label: string; phrase: string }> = [
   { id: 'today', label: 'Today', phrase: 'today' },
@@ -56,7 +56,8 @@ function docFor(c: StoredConversation): SearchDoc {
   return d
 }
 
-export type CategoryCounts = Record<FilterId, number>
+/** Conversations per filter id ("all", each primary, each subcategory). Absent means none. */
+export type CategoryCounts = Map<FilterId, number>
 
 export interface HistoryView {
   rows: Row[]
@@ -67,16 +68,22 @@ export interface HistoryView {
   filtering: boolean
   /** Anything at all is narrowing the list, category included. */
   narrowed: boolean
-  /** Per chip, how many conversations pass the search and date filters. Independent of the selected chip, so it says what picking one would show. */
+  /** Per filter, how many conversations pass the search and date filters. Independent of the selected filter, so it says what picking one would show. */
   categoryCounts: CategoryCounts
+  /** Per filter, across the whole history: which subcategories exist at all, for the More menu. */
+  historyCounts: CategoryCounts
   matchCount: number
   total: number
 }
 
+/** Each conversation counts once under its primary and once under its subcategory, if it has one. */
 export function countByCategory(entries: readonly Entry[]): CategoryCounts {
-  const counts = Object.fromEntries(FILTERS.map((f) => [f.id, 0])) as CategoryCounts
-  counts.all = entries.length
-  for (const e of entries) counts[filterFor(e.conv)]++
+  const counts: CategoryCounts = new Map([['all', entries.length]])
+  for (const e of entries) {
+    const c = classificationOf(e.conv)
+    counts.set(c.primary, (counts.get(c.primary) ?? 0) + 1)
+    if (c.sub) counts.set(c.sub, (counts.get(c.sub) ?? 0) + 1)
+  }
   return counts
 }
 
@@ -115,7 +122,8 @@ export function useHistoryView(args: {
     return sorted.filter((e) => matches(e.conv, docFor(e.conv), parsed, mode) && inRanges(e.conv, extra, mode))
   }, [sorted, parsed, filterRange, filtering, mode])
   const categoryCounts = useMemo(() => countByCategory(scoped), [scoped])
-  const entries = useMemo(() => (category === 'all' ? scoped : scoped.filter((e) => filterFor(e.conv) === category)), [scoped, category])
+  const historyCounts = useMemo(() => (scoped === sorted ? categoryCounts : countByCategory(sorted)), [sorted, scoped, categoryCounts])
+  const entries = useMemo(() => (category === 'all' ? scoped : scoped.filter((e) => matchesFilter(classificationOf(e.conv), category))), [scoped, category])
 
   const chronological = useMemo(
     () =>
@@ -133,12 +141,12 @@ export function useHistoryView(args: {
   // Searching shows matches only; the related block steps aside. A chip keeps it, narrowed to the same category.
   const relatedRows = useMemo(() => {
     if (filtering) return []
-    const items = category === 'all' ? related : related.filter((r) => filterFor(r.entry.conv) === (category as CategoryFilterId))
+    const items = category === 'all' ? related : related.filter((r) => matchesFilter(classificationOf(r.entry.conv), category))
     return buildRelatedRows(items, collapsed)
   }, [filtering, related, category, collapsed])
   const rows = useMemo(() => (relatedRows.length ? [...relatedRows, ...chronological] : chronological), [relatedRows, chronological])
 
-  return { rows, sorted, parsed, filterRange, filtering, narrowed: filtering || category !== 'all', categoryCounts, matchCount: entries.length, total: sorted.length }
+  return { rows, sorted, parsed, filterRange, filtering, narrowed: filtering || category !== 'all', categoryCounts, historyCounts, matchCount: entries.length, total: sorted.length }
 }
 
 /** A DateContext that only changes when the calendar day (or locale setup) does. */

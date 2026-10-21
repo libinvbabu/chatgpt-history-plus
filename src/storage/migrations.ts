@@ -3,6 +3,8 @@
 // could break the UI.
 
 import { DEFAULT_SETTINGS, type HistoryIndex, type Settings, type StoredConversation } from '../history/types'
+import { migrateCategoryId } from '../related/classify'
+import { emptyFilterPrefs, type FilterPrefs } from '../ui/personalize'
 
 export const CURRENT_SCHEMA_VERSION = 1
 
@@ -54,4 +56,26 @@ export function migrateSettings(raw: unknown): Settings {
 
 function num(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null
+}
+
+/** Filter bar preferences for one account. Ids from older versions are mapped; unknown ones are dropped. */
+export function migrateFilterPrefs(raw: unknown): FilterPrefs {
+  if (!raw || typeof raw !== 'object') return emptyFilterPrefs()
+  const r = raw as Record<string, unknown>
+  const ids = (v: unknown): string[] => {
+    const out: string[] = []
+    if (Array.isArray(v)) for (const x of v.slice(0, 100)) {
+      const id = migrateCategoryId(x)
+      if (id && !out.includes(id)) out.push(id)
+    }
+    return out
+  }
+  return {
+    pinned: ids(r.pinned),
+    hidden: ids(r.hidden),
+    ranked: ids(r.ranked),
+    basis: num(r.basis) ?? 0,
+    complete: r.complete === true,
+    v: num(r.v) ?? 0,
+  }
 }

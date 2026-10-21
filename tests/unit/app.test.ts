@@ -50,6 +50,30 @@ function relatedProvider(): ConversationProvider {
 
 const settle = (ms = 400) => new Promise((resolve) => setTimeout(resolve, ms))
 
+/** A history with real titles, for the filter bar: `titles` repeated to `total` chats. */
+function titledProvider(accountKey: string, titles: readonly string[], total = titles.length): ConversationProvider & { total: number } {
+  const p = {
+    total,
+    async connect() {
+      return {
+        accountKey,
+        async list({ offset, limit }: { offset: number; limit: number }): Promise<ConversationPage> {
+          const items = Array.from({ length: Math.max(0, Math.min(limit, p.total - offset)) }, (_, i) => {
+            const n = offset + i
+            return { id: `${accountKey}-${n}`, title: titles[n % titles.length]!, createdAt: 1e12 - n, updatedAt: 1e12 - n }
+          })
+          return { items, rawCount: items.length, malformed: 0, total: p.total, stats }
+        },
+      }
+    },
+  }
+  return p
+}
+
+const DEV_TITLES = ['Review backend PR #4294', 'Debug flaky login test', 'Postgres index tuning', 'Kubernetes autoscaling config', 'Write an email to my manager', 'Fix NullPointerException in OrderService']
+const COOK_TITLES = ['Easy dinner recipes for kids', 'Chocolate cake recipe without eggs', 'Plan a family trip to Kerala', 'Visa requirements for Japan', 'Toddler sleep regression tips']
+
+
 describe('HistoryApp', () => {
   it('keeps the related-chats index in step with the synced history, and drops it on clear', async () => {
     const app = new HistoryApp({ kv: memoryStore(), provider: relatedProvider(), pageDelayMs: 0 })
@@ -157,5 +181,110 @@ describe('HistoryApp', () => {
     expect(await kv.keys()).toEqual([])
     expect(app.state.index).toBeNull()
     expect(app.state.paused).toBe(true)
+  })
+
+  it('maps a remembered filter from an older version, and falls back to All for one that no longer exists', async () => {
+    for (const [stored, expected] of [
+      ['engineering', 'technology'],
+      ['pr-reviews', 'pr-reviews'],
+      ['other', 'general'],
+      ['writing', 'writing'],
+      ['no-such-filter', 'all'],
+    ] as const) {
+      const app = new HistoryApp({ kv: memoryStore({ ui: { category: stored, collapsed: { yesterday: false } } }), provider: provider(), pageDelayMs: 0 })
+      await app.init()
+      expect(app.state.category, stored).toBe(expected)
+      expect(app.state.collapsed).toEqual({ yesterday: false }) // other UI state untouched
+    }
+  })
+
+  it('chooses the filter bar from the synced history and stores it per account', async () => {
+    const kv = memoryStore()
+    const app = new HistoryApp({ kv, provider: titledProvider('dev', DEV_TITLES, 120), pageDelayMs: 0 })
+    await app.init()
+    await app.open()
+    await settle()
+    expect(app.state.filterPrefs.ranked[0]).toBe('technology')
+    expect(app.state.filterPrefs).toMatchObject({ basis: 120, complete: true })
+    expect((await kv.get<{ ranked: string[] }>('flt:dev'))!.ranked).toEqual(app.state.filterPrefs.ranked)
+    // Nothing about categories is written into the conversation index.
+    const idx = (await kv.get<{ conversations: Record<string, object> }>('idx:dev'))!
+    expect(Object.values(idx.conversations).some((c) => 'category' in c)).toBe(false)
+    app.dispose()
+  })
+
+  it('keeps pins and hidden filters per account (personal and workspace never mix)', async () => {
+    const kv = memoryStore()
+    const dev = new HistoryApp({ kv, provider: titledProvider('dev', DEV_TITLES, 60), pageDelayMs: 0 })
+    await dev.init()
+    await dev.open()
+    await settle()
+    dev.pinFilter('cooking', true)
+    dev.hideFilter('debugging', true)
+    expect(dev.state.filterPrefs).toMatchObject({ pinned: ['cooking'], hidden: ['debugging'] })
+    dev.dispose()
+
+    const home = new HistoryApp({ kv, provider: titledProvider('home', COOK_TITLES, 60), pageDelayMs: 0 })
+    await home.init()
+    await home.open()
+    await settle()
+    expect(home.state.filterPrefs).toMatchObject({ pinned: [], hidden: [] })
+    expect(home.state.filterPrefs.ranked[0]).toBe('personal')
+    home.dispose()
+
+    const again = new HistoryApp({ kv, provider: titledProvider('dev', DEV_TITLES, 60), pageDelayMs: 0 })
+    await again.init()
+    await again.open()
+    await settle()
+    expect(again.state.filterPrefs).toMatchObject({ pinned: ['cooking'], hidden: ['debugging'] })
+    // Pinning un-hides, hiding un-pins; reset forgets both and chooses afresh.
+    again.pinFilter('debugging', true)
+    expect(again.state.filterPrefs).toMatchObject({ pinned: ['cooking', 'debugging'], hidden: [] })
+    again.resetFilters()
+    expect(again.state.filterPrefs).toMatchObject({ pinned: [], hidden: [], complete: true })
+    expect(again.state.filterPrefs.ranked[0]).toBe('technology')
+    again.dispose()
+  })
+
+  it('never reshuffles the bar while the panel is open: a new choice waits for it to close', async () => {
+    const kv = memoryStore()
+    const p = titledProvider('dev', DEV_TITLES, 60)
+    const app = new HistoryApp({ kv, provider: p, pageDelayMs: 0 })
+    await app.init()
+    await app.open()
+    await settle()
+    const before = app.state.filterPrefs
+    expect(before.ranked[0]).toBe('technology')
+
+    // The history changes shape a lot (the user has been cooking), and syncs while the panel is open.
+    const cooking = titledProvider('dev', COOK_TITLES, 400)
+    const later = new HistoryApp({ kv, provider: { connect: async () => ({ ...(await cooking.connect()), accountKey: 'dev' }) }, pageDelayMs: 0 })
+    await later.init()
+    await later.open()
+    await settle()
+    const opened = later.state.filterPrefs
+    await later.syncNow('full')
+    await settle()
+    expect(later.state.filterPrefs).toBe(opened) // unchanged while open
+
+    later.close()
+    expect(later.state.filterPrefs.ranked[0]).toBe('personal') // applied on close
+    app.dispose()
+    later.dispose()
+  })
+
+  it('clearing local data forgets the filter preferences too', async () => {
+    const kv = memoryStore()
+    const app = new HistoryApp({ kv, provider: titledProvider('dev', DEV_TITLES, 30), pageDelayMs: 0 })
+    await app.init()
+    await app.open()
+    await settle()
+    app.pinFilter('travel', true)
+    await settle(50)
+    expect(kv.data.has('flt:dev')).toBe(true)
+    await app.clearAllData()
+    expect(kv.data.has('flt:dev')).toBe(false)
+    expect(app.state.filterPrefs.pinned).toEqual([])
+    app.dispose()
   })
 })

@@ -6,6 +6,7 @@ import { isMac, SHORTCUT_LABEL } from '../shared/platform'
 import { formatRelativeAgo, getWeekStartsOn } from '../utils/dates'
 import { filterDef } from './categories'
 import { CategoryFilters } from './CategoryFilters'
+import { visibleFilters } from './personalize'
 import { DateFilterMenu } from './DateFilterMenu'
 import { EmptyState, Skeleton } from './EmptyState'
 import { AlertIcon, BackIcon, CloseIcon, HistoryIcon, LockIcon, SearchIcon, SlidersIcon, SyncIcon } from './icons'
@@ -70,6 +71,7 @@ function HistoryPanel({ app, state, closing }: { app: HistoryApp; state: AppStat
 
   const related = useRelated(app, state)
   const view = useHistoryView({ ...state, transientCollapsed, ctx, related })
+  const shownFilters = useMemo(() => visibleFilters(state.filterPrefs), [state.filterPrefs])
   const { rows, parsed } = view
 
   // Search box focus on open / shortcut, and give focus back to ChatGPT on close.
@@ -266,7 +268,17 @@ function HistoryPanel({ app, state, closing }: { app: HistoryApp; state: AppStat
             )}
           </label>
 
-          <CategoryFilters value={state.category} counts={view.categoryCounts} onChange={(id) => app.setCategory(id)} />
+          <CategoryFilters
+            value={state.category}
+            visible={shownFilters}
+            counts={view.categoryCounts}
+            historyCounts={view.historyCounts}
+            prefs={state.filterPrefs}
+            onChange={(id) => app.setCategory(id)}
+            onPin={(id, on) => app.pinFilter(id, on)}
+            onHide={(id, on) => app.hideFilter(id, on)}
+            onReset={() => app.resetFilters()}
+          />
 
           <div className="toolbar">
             <SortMenu value={state.settings.timestampMode} onChange={(timestampMode) => void app.updateSettings({ timestampMode })} />

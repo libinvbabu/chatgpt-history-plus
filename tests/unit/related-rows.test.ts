@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { RELATED_INITIAL, RELATED_KEY, RELATED_MORE_KEY, buildRelatedRows, type RelatedEntry } from '../../src/history/related-rows'
-import { categoryFor } from '../../src/related/extract'
 import { at, conv } from './helpers'
 
 const items = (n: number): RelatedEntry[] =>
@@ -50,17 +49,5 @@ describe('related rows', () => {
   it('gives each row a key distinct from the same chat in the date groups', () => {
     const rows = buildRelatedRows(items(2), {})
     expect(rows.filter((r) => r.type === 'related').every((r) => r.key.startsWith('r:'))).toBe(true)
-  })
-})
-
-describe('category lookup', () => {
-  it('uses a stored category when valid, else derives one from the title, else general', () => {
-    expect(categoryFor({ title: 'Weekend trip', category: 'security' })).toBe('security')
-    expect(categoryFor({ title: 'Review Paytm Autopay PR', category: null })).toBe('code-review')
-    expect(categoryFor({ title: 'Review Paytm Autopay PR', category: 'not-a-category' })).toBe('code-review')
-    expect(categoryFor({ title: 'Weekend trip' })).toBe('general')
-    // Names that exist on every object are not categories.
-    expect(categoryFor({ title: 'Weekend trip', category: 'toString' })).toBe('general')
-    expect(categoryFor({ title: 'Weekend trip', category: 'constructor' })).toBe('general')
   })
 })

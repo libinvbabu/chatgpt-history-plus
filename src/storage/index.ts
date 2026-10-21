@@ -16,6 +16,8 @@ export const KEYS = {
   diagnostics: 'diagnostics',
   pacing: 'pacing',
   index: (accountKey: string) => `idx:${accountKey}`,
+  /** Per account: pinned and hidden category filters, and the automatic choice (see ui/personalize.ts). */
+  filters: (accountKey: string) => `flt:${accountKey}`,
 } as const
 
 export function chromeStore(area: chrome.storage.StorageArea = chrome.storage.local): KeyValueStore {

@@ -1,75 +1,98 @@
 import { describe, expect, it } from 'vitest'
-import { CATEGORY_LABELS, type CategoryId } from '../../src/related/dictionary'
-import { categoryDisplay, filterDef, filterFor, FILTERS, isFilterId } from '../../src/ui/categories'
+import { classifyTitle } from '../../src/related/classify'
+import { PRIMARY_IDS, SUBCATEGORIES } from '../../src/related/taxonomy'
+import { ALL_FILTER, CATEGORY_FILTERS, categoryDisplay, classificationOf, filterDef, isFilterId, isPrimaryFilter, matchesFilter, migrateFilterId } from '../../src/ui/categories'
 import { countByCategory } from '../../src/ui/view'
+import { ALL_LABELLED } from './fixtures/personas'
 import { conv } from './helpers'
 
 describe('category filters', () => {
-  it('lists the chips in order, each with its own icon', () => {
-    expect(FILTERS.map((f) => [f.id, f.label, f.icon])).toEqual([
-      ['all', 'All', 'grid'],
-      ['pr-reviews', 'Reviews', 'git-pull-request'],
-      ['engineering', 'Engineering', 'code'],
+  it('lists every primary, each followed by its subcategories, General last', () => {
+    const primaries = CATEGORY_FILTERS.filter((f) => !f.parent).map((f) => f.id)
+    expect(primaries).toEqual([...PRIMARY_IDS])
+    expect(CATEGORY_FILTERS.length).toBe(PRIMARY_IDS.length + SUBCATEGORIES.length)
+    // Grouped: a subcategory always comes after its primary and before the next primary.
+    let current = ''
+    for (const f of CATEGORY_FILTERS) {
+      if (!f.parent) current = f.id
+      else expect(f.parent, f.id).toBe(current)
+    }
+    expect(ALL_FILTER).toMatchObject({ id: 'all', label: 'All', icon: 'grid' })
+  })
+
+  it('gives each primary its own icon (the Lucide set from the spec)', () => {
+    const icons = Object.fromEntries(CATEGORY_FILTERS.filter((f) => !f.parent).map((f) => [f.id, f.icon]))
+    expect(icons).toEqual({
+      work: 'briefcase',
+      learning: 'graduation-cap',
+      writing: 'pen-line',
+      creative: 'palette',
+      technology: 'code',
+      planning: 'calendar-check',
+      personal: 'heart',
+      general: 'message',
+    })
+  })
+
+  it('keeps the developer subcategories, with their own icons', () => {
+    for (const [id, label, icon] of [
+      ['pr-reviews', 'PR Reviews', 'git-pull-request'],
+      ['debugging', 'Debugging', 'bug'],
+      ['security', 'Security', 'shield'],
       ['analytics', 'Analytics', 'chart'],
-      ['product', 'Product', 'lightbulb'],
       ['payments', 'Payments', 'credit-card'],
-      ['writing', 'Writing', 'pen'],
-      ['other', 'Other', 'message'],
-    ])
-    expect(new Set(FILTERS.map((f) => f.icon)).size).toBe(FILTERS.length)
+      ['product', 'Product', 'lightbulb'],
+      ['hiring', 'Hiring', 'users'],
+    ] as const)
+      expect(filterDef(id), id).toMatchObject({ label, icon })
   })
 
-  it('files every category the extractor can produce under a chip, so no conversation is unreachable', () => {
-    const chips = new Set(FILTERS.filter((f) => f.id !== 'all').map((f) => f.id))
-    for (const id of Object.keys(CATEGORY_LABELS) as CategoryId[]) {
-      const d = categoryDisplay(id)
-      expect(chips.has(d.filter), id).toBe(true)
-      expect(d.label.length, id).toBeGreaterThan(0)
-    }
+  it('shows a row its subcategory icon where it has one, else its primary icon', () => {
+    expect(categoryDisplay(classifyTitle('Investigate Meta sync failure'))).toEqual({ primary: 'technology', sub: 'debugging', label: 'Technology · Debugging', icon: 'bug' })
+    expect(categoryDisplay(classifyTitle('Plan a family trip to Kerala'))).toMatchObject({ label: 'Personal · Travel', icon: 'plane' })
+    expect(categoryDisplay(classifyTitle('Kubernetes autoscaling config'))).toMatchObject({ label: 'Technology · Infrastructure', icon: 'code' })
+    expect(categoryDisplay(classifyTitle('Hello'))).toEqual({ primary: 'general', sub: null, label: 'General', icon: 'message' })
   })
 
-  it('shows a row the chip’s label and icon, or its own where it says more', () => {
-    expect(categoryDisplay('payments')).toEqual({ filter: 'payments', label: 'Payments', icon: 'credit-card' })
-    expect(categoryDisplay('code-review')).toEqual({ filter: 'pr-reviews', label: 'Reviews', icon: 'git-pull-request' })
-    // Listed under Engineering, but the row keeps its more specific icon and name.
-    expect(categoryDisplay('debugging')).toEqual({ filter: 'engineering', label: 'Debugging', icon: 'bug' })
-    expect(categoryDisplay('security')).toEqual({ filter: 'engineering', label: 'Security & access', icon: 'shield' })
-    expect(categoryDisplay('people')).toEqual({ filter: 'other', label: 'Hiring & people', icon: 'users' })
+  it('a primary filter shows everything under it; a subcategory only its part', () => {
+    const pr = classifyTitle('Review Paytm PR')
+    expect(matchesFilter(pr, 'all')).toBe(true)
+    expect(matchesFilter(pr, 'technology')).toBe(true)
+    expect(matchesFilter(pr, 'pr-reviews')).toBe(true)
+    expect(matchesFilter(pr, 'debugging')).toBe(false)
+    expect(matchesFilter(pr, 'work')).toBe(false)
   })
 
-  it('treats anything unknown as Other', () => {
-    for (const v of [undefined, null, '', 'not-a-category', 'toString', '__proto__']) {
-      expect(categoryDisplay(v), String(v)).toEqual({ filter: 'other', label: 'Other', icon: 'message' })
-    }
-    expect(categoryDisplay('general')).toEqual({ filter: 'other', label: 'Other', icon: 'message' })
-  })
-
-  it('picks the chip from a stored category, else the title, else Other', () => {
-    expect(filterFor({ title: 'Weekend trip', category: 'payments' })).toBe('payments')
-    expect(filterFor({ title: 'Review Paytm Autopay PR', category: null })).toBe('pr-reviews')
-    expect(filterFor({ title: 'Review Paytm Autopay PR', category: 'not-a-category' })).toBe('pr-reviews')
-    expect(filterFor({ title: 'Weekend trip', category: 'not-a-category' })).toBe('other')
-    expect(filterFor({ title: '' })).toBe('other')
-  })
-
-  it('validates a remembered chip', () => {
+  it('validates and migrates a remembered filter', () => {
     expect(isFilterId('all')).toBe(true)
-    expect(isFilterId('writing')).toBe(true)
-    expect(isFilterId('debugging')).toBe(false) // a category, not a chip
+    expect(isFilterId('technology')).toBe(true)
+    expect(isFilterId('debugging')).toBe(true) // a subcategory is a filter now
+    expect(isFilterId('engineering')).toBe(false) // a 0.2 id, mapped by migrateFilterId instead
     expect(isFilterId(undefined)).toBe(false)
     expect(isFilterId({})).toBe(false)
-    expect(filterDef('other').label).toBe('Other')
+    // Every 0.2 chip still means something.
+    expect(['pr-reviews', 'engineering', 'analytics', 'product', 'payments', 'writing', 'other'].map(migrateFilterId)).toEqual(['pr-reviews', 'technology', 'analytics', 'product', 'payments', 'writing', 'general'])
+    for (const v of [undefined, null, 'gone', 'toString', 7]) expect(migrateFilterId(v)).toBe('all')
+    expect(isPrimaryFilter('technology')).toBe(true)
+    expect(isPrimaryFilter('pr-reviews')).toBe(false)
+    expect(isPrimaryFilter('all')).toBe(false)
   })
 
-  it('counts each conversation once, under its chip, and All is the total', () => {
-    const titles = ['Review Paytm Autopay PR', 'Debug CI pipeline', 'Fix login bug', 'Draft launch email', 'Weekend trip', 'Plan roadmap']
-    const entries = titles.map((t, i) => ({ conv: conv(t, 1000 + i), ts: 1000 + i }))
+  it('counts each conversation once under its primary (so primaries add up to All) and once under its subcategory', () => {
+    const entries = ALL_LABELLED.map((l, i) => ({ conv: conv(l.title, 1000 + i), ts: 1000 + i }))
     const counts = countByCategory(entries)
-    expect(counts.all).toBe(entries.length)
-    const parts = FILTERS.filter((f) => f.id !== 'all').reduce((n, f) => n + counts[f.id], 0)
-    expect(parts).toBe(entries.length)
-    expect(counts['pr-reviews']).toBe(1)
-    expect(counts.engineering).toBe(2) // debugging is listed under Engineering
-    expect(countByCategory([]).all).toBe(0)
+    expect(counts.get('all')).toBe(entries.length)
+    const primaries = PRIMARY_IDS.reduce((n, p) => n + (counts.get(p) ?? 0), 0)
+    expect(primaries).toBe(entries.length) // no conversation disappears
+    for (const p of PRIMARY_IDS) {
+      const subs = SUBCATEGORIES.filter((s) => s.parent === p).reduce((n, s) => n + (counts.get(s.id) ?? 0), 0)
+      expect(subs, p).toBeLessThanOrEqual(counts.get(p) ?? 0)
+    }
+    expect(countByCategory([]).get('all')).toBe(0)
+  })
+
+  it('reads a stored category before the title', () => {
+    expect(classificationOf({ title: 'Weekend trip', category: 'payments' })).toMatchObject({ primary: 'work', sub: 'payments' })
+    expect(classificationOf({ title: 'Weekend trip', category: 'not-a-category' })).toMatchObject({ primary: 'personal', sub: 'travel' })
   })
 })

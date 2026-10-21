@@ -40,6 +40,31 @@ export function SettingsView({ app, state, onToast }: { app: HistoryApp; state: 
       </section>
 
       <section>
+        <h4>Category filters</h4>
+        <p>
+          The filters under the search box are chosen from your own history and change only when it does. Categories are worked out on this device from conversation titles: no AI service, nothing
+          uploaded.
+        </p>
+        <p>
+          {state.filterPrefs.pinned.length || state.filterPrefs.hidden.length
+            ? `${plural(state.filterPrefs.pinned.length, 'pinned filter')}, ${plural(state.filterPrefs.hidden.length, 'hidden filter')}. Change them under More → Customize filters.`
+            : 'Pin or hide filters under More → Customize filters.'}
+        </p>
+        <div className="row-btns">
+          <button
+            className="btn"
+            disabled={!state.filterPrefs.pinned.length && !state.filterPrefs.hidden.length}
+            onClick={() => {
+              app.resetFilters()
+              onToast('Filters reset to automatic')
+            }}
+          >
+            Reset filters to automatic
+          </button>
+        </div>
+      </section>
+
+      <section>
         <h4>ChatGPT sidebar</h4>
         <label className="option">
           <input type="checkbox" checked={settings.showNativeDates} onChange={(e) => set({ showNativeDates: e.target.checked })} />
@@ -178,3 +203,5 @@ function Radio({ name, checked, onChange, title, desc }: { name: string; checked
     </label>
   )
 }
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`

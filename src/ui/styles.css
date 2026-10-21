@@ -287,13 +287,20 @@ svg {
 
 /* ------------------------------------------------------- category filters */
 
-/* One row of pills that scrolls sideways: never wraps, no scrollbar. An edge fades while more lies beyond it. */
+/* One row of pills that scrolls sideways: never wraps, no scrollbar. An edge fades while more lies beyond it.
+   More sits outside the scrolling part, at the right edge, so it is always in reach. */
 .cats {
+  position: relative;
   flex: none;
+  display: flex;
+  align-items: center;
   margin-top: 12px;
+  padding-right: 12px;
 }
 
 .cats-scroll {
+  flex: 0 1 auto;
+  min-width: 0;
   --fade-start: 0px;
   --fade-end: 0px;
   position: relative;
@@ -355,6 +362,201 @@ svg {
 
 .cat-chip:focus-visible {
   outline-offset: -2px;
+}
+
+.cats .more-anchor {
+  flex: none;
+  position: static;
+}
+
+.cat-more {
+  gap: 3px;
+  padding: 0 8px 0 10px;
+}
+
+.cat-more[aria-expanded='true'] {
+  background: var(--hover);
+  color: var(--fg-muted);
+}
+
+/* The selected filter came from More: More says so quietly. */
+.cat-more[data-on] {
+  color: var(--fg-muted);
+}
+
+/* ------------------------------------------------------------ More menu */
+
+/* Spans the panel under the chips, like the toolbar menus. */
+.cat-menu {
+  top: calc(100% + 6px);
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  max-height: min(440px, 64vh);
+  overflow: hidden;
+  padding: 6px 0 4px;
+}
+
+.cat-menu-search {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin: 0 6px 4px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--fg-subtle);
+}
+
+.cat-menu-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.cat-menu-note {
+  flex: none;
+  margin: 2px 14px 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--fg-subtle);
+}
+
+.cat-menu-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 6px;
+}
+
+.cat-menu-empty {
+  padding: 10px 8px;
+  font-size: 13px;
+  color: var(--fg-subtle);
+}
+
+.popover .cat-item {
+  height: 30px;
+  gap: 8px;
+  color: var(--fg-muted);
+}
+
+.popover .cat-item[data-level='0'] {
+  color: var(--fg);
+}
+
+.popover .cat-item[data-level='1'] {
+  padding-left: 30px;
+}
+
+.popover .cat-item[aria-pressed='true'] {
+  font-weight: 500;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.popover .cat-item[data-empty]:not([aria-pressed='true']) {
+  opacity: 0.55;
+}
+
+.popover .cat-item .check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 14px;
+}
+
+.popover .cat-item svg {
+  flex: none;
+}
+
+.popover .cat-item .label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popover .cat-item .in {
+  font-size: 11.5px;
+  color: var(--fg-subtle);
+  white-space: nowrap;
+}
+
+/* Customize: a status word, then pin and hide toggles. */
+.popover .cat-item.editing {
+  cursor: default;
+}
+
+.popover .cat-item.editing:hover {
+  background: transparent;
+}
+
+.popover .cat-item .cat-status {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--fg-subtle);
+  white-space: nowrap;
+}
+
+.popover .cat-item .toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--fg-subtle);
+  opacity: 0.7;
+}
+
+.popover .cat-item .toggle:hover,
+.popover .cat-item .toggle:focus-visible {
+  background: var(--hover);
+  color: var(--fg);
+  opacity: 1;
+}
+
+.popover .cat-item .toggle[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-fg);
+  opacity: 1;
+}
+
+.cat-menu .sep {
+  flex: none;
+  margin: 4px 10px;
+}
+
+.cat-menu-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 12px 2px 14px;
+}
+
+.cat-menu-foot .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cat-menu-foot .link-btn[disabled] {
+  opacity: 0.45;
+  cursor: default;
+  text-decoration: none;
 }
 
 /* -------------------------------------------------------------- toolbar */

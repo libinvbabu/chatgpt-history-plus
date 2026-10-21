@@ -35,7 +35,7 @@ History+ adds the missing piece, **time**:
 ## Features
 
 - **Your whole history, by date.** Today (always open), then Yesterday, Earlier this week, Last week and Older conversations (month by month inside), all collapsed until you open them, with a count and a date on every header. Each chat is one line: a small category icon, the title, and its time (`09:41 PM`, or `21:41` if you switch to 24-hour in Settings). Your choices are remembered.
-- **Category filters.** One scrollable row of chips under the search box (Reviews, Engineering, Analytics, Product, Payments, Writing, Other) narrows the list to one kind of chat. Hover a chip to see how many chats it would show for your current search and dates. They work together with search, the date filter and sorting. Your pick is remembered. Categories are worked out on your device from titles, with no extra requests.
+- **Smart categories that fit your history.** Every chat is filed under one of eight everyday categories (Work, Learning, Writing, Creative, Technology, Planning, Personal, General) and, when its title is clear, a more specific one: PR Reviews, Debugging, Mathematics, Exam Prep, Travel, Cooking, Meetings, Hiring and about 40 more. The filters under the search box are **chosen from your own history**, so a student sees Learning and their subjects, a developer sees Technology and PR Reviews, and a parent sees Personal, Travel and Cooking, without anyone being asked what they do. **More** lists every category with counts (and a search box); **Customize filters** lets you pin or hide filters. Filters work together with search, the date filter and sorting, and stay put while you use them. Categories are worked out on your device from titles alone: no AI service, no extra requests, nothing uploaded.
 - **Related to this chat.** Above Today, the two chats most related to the one you have open (more on request): the same PR, the same project, the same recurring problem. Hover a row to see why it matched. It is worked out on your device from titles, and shows nothing rather than a weak guess.
 - **Dates in ChatGPT's own sidebar.** A small date appears beside every conversation ChatGPT lists.
 - **Instant search that understands dates.** Try `roadmap last month`, `around sep 14`, `invoice in:aug` or `created:2026-07`. Search covers titles only, never needs the network, and handles 10,000+ chats easily.
@@ -52,7 +52,7 @@ History+ adds the missing piece, **time**:
 
 History+ reads **conversation titles, ids and timestamps** from chatgpt.com, the same list ChatGPT's own sidebar loads, and keeps them in your browser's extension storage.
 
-- **No message content** is ever read. "Related to this chat" is worked out in memory from titles alone: no extra data is stored, and there are no AI or network calls.
+- **No message content** is ever read. Categories, filters and "Related to this chat" are worked out on your device from titles alone, by plain rules: no AI service, no network calls, and nothing extra stored beyond your filter choices.
 - **Nothing leaves your device.** There are no servers, analytics or third parties; the only requests go to chatgpt.com.
 - **Your session token** is held in memory for one sync and never stored.
 - **Permissions:** just `storage` and access to `chatgpt.com`.

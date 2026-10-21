@@ -8,10 +8,12 @@ import { isAbortError, ProviderError, type ConversationProvider, type ProviderSe
 import { MetadataRepository, WRITER_ID, type StoredIndex } from '../history/repository'
 import { PACING, newDiagnostics, syncIndex, type Pacing, type SyncDiagnostics, type SyncMode } from '../history/sync'
 import { emptyIndex, type HistoryIndex, type Settings } from '../history/types'
+import { classifyTitle, isClassified } from '../related/classify'
 import { RelatedEngine } from '../related/engine'
 import { KEYS, type KeyValueStore } from '../storage'
-import { isFilterId, type FilterId } from '../ui/categories'
-import { migrateIndex, migrateSettings } from '../storage/migrations'
+import { classificationOf, isFilterId, migrateFilterId, type FilterId } from '../ui/categories'
+import { emptyFilterPrefs, PERSONALIZE_VERSION, rankFilters, shouldRefresh, tally, visibleFilters, type FilterPrefs } from '../ui/personalize'
+import { migrateFilterPrefs, migrateIndex, migrateSettings } from '../storage/migrations'
 import { navigateToConversation } from './navigation'
 import { createStore, initialState, initialSync, type AppState, type DateFilter, type Store, type SyncState } from './store'
 
@@ -35,7 +37,8 @@ interface StoredPacing {
 
 interface UiPrefs {
   collapsed?: Record<string, boolean>
-  category?: FilterId
+  /** A filter id; may be one from an older version ("engineering"), mapped on read. */
+  category?: string
   lastAccountKey?: string
   writer?: string
 }
@@ -71,6 +74,8 @@ export class HistoryApp {
   private relatedTimer: ReturnType<typeof setTimeout> | undefined
   private relatedRun = 0
   private relatedSeen: { index: HistoryIndex | null; rev: number } = { index: null, rev: -1 }
+  /** The filter bar has a new automatic choice waiting for the panel to close. */
+  private filtersPending = false
   private readonly repo: MetadataRepository
   private readonly now: () => number
   private identifying: Promise<ProviderSession | null> | null = null
@@ -115,7 +120,7 @@ export class HistoryApp {
     this.store.set({
       settings: migrateSettings(settings),
       collapsed: sanitizeCollapsed(ui?.collapsed),
-      category: isFilterId(ui?.category) ? ui.category : 'all',
+      category: migrateFilterId(ui?.category),
       diagnostics: diagnostics ?? null,
       currentId: conversationIdFromPath(location.pathname),
     })
@@ -154,27 +159,44 @@ export class HistoryApp {
   }
 
   // -------------------------------------------------------------------------
-  // Related conversations
+  // Derived from the history: categories, the filter bar, related conversations
 
-  /** The history changed (loaded, synced, switched account, cleared): refresh the related index soon. */
+  /** The history changed (loaded, synced, switched account, cleared): refresh what is derived from it soon. */
   private onHistoryChanged(): void {
     const s = this.state
     if (s.index === this.relatedSeen.index && s.indexRev === this.relatedSeen.rev) return
     this.relatedSeen = { index: s.index, rev: s.indexRev }
     clearTimeout(this.relatedTimer)
-    this.relatedTimer = setTimeout(() => void this.refreshRelated(), RELATED_DEBOUNCE_MS)
+    this.relatedTimer = setTimeout(() => void this.refreshDerived(), RELATED_DEBOUNCE_MS)
   }
 
   /**
-   * Diff the history against the related index and index what changed in short
-   * slices, yielding to the page in between so a first backfill of thousands of
-   * titles never blocks typing or scrolling. A newer change supersedes this run.
+   * Classify new titles, then diff the history against the related index and
+   * index what changed, in short slices that yield to the page in between, so
+   * a first backfill of thousands of titles never blocks typing or scrolling.
+   * Classifications are memoised by title, so the list renders from cache.
+   * A newer change supersedes this run.
    */
-  private async refreshRelated(): Promise<void> {
+  private async refreshDerived(): Promise<void> {
     const run = ++this.relatedRun
+    const yieldToPage = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+    const titles = Object.values(this.state.index?.conversations ?? {}).map((c) => c.title)
+    for (let i = 0; i < titles.length; ) {
+      const until = now() + RELATED_SLICE_MS
+      while (i < titles.length && now() < until) {
+        const t = titles[i++]!
+        if (!isClassified(t)) classifyTitle(t)
+      }
+      if (i < titles.length) {
+        await yieldToPage()
+        if (run !== this.relatedRun) return
+      }
+    }
+    this.refreshFilters()
+
     this.related.plan(this.state.index)
     while (this.related.step(RELATED_SLICE_MS)) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      await yieldToPage()
       if (run !== this.relatedRun) return
     }
     if (run === this.relatedRun && this.related.version !== this.state.relatedRev) this.store.set({ relatedRev: this.related.version })
@@ -218,8 +240,9 @@ export class HistoryApp {
 
   private async useAccount(accountKey: string): Promise<void> {
     if (this.state.accountKey === accountKey && this.state.index) return
-    const index = await this.repo.load(accountKey)
-    this.store.set((s) => ({ accountKey, index, indexRev: s.indexRev + 1 }))
+    const [index, filterPrefs] = await Promise.all([this.repo.load(accountKey), this.deps.kv.get(KEYS.filters(accountKey)).then(migrateFilterPrefs)])
+    this.filtersPending = false
+    this.store.set((s) => ({ accountKey, index, indexRev: s.indexRev + 1, filterPrefs }))
     if (this.lastAccountKey !== accountKey) {
       this.lastAccountKey = accountKey
       this.saveUi()
@@ -366,6 +389,7 @@ export class HistoryApp {
   close(): void {
     // Reopening in the same page returns to the same place.
     this.store.set({ open: false, initialScrollTop: this.scrollTop })
+    if (this.filtersPending) this.refreshFilters()
   }
 
   /** Shortcut/toolbar: open, focus the search box if already open, or close. */
@@ -391,11 +415,72 @@ export class HistoryApp {
     this.store.set({ dateFilter })
   }
 
-  /** Pick a category chip. Search, date filter and sorting stay as they are. */
+  /** Pick a category filter. Search, date filter and sorting stay as they are. */
   setCategory(category: FilterId): void {
-    if (category === this.state.category) return
+    if (category === this.state.category || !isFilterId(category)) return
     this.store.set({ category })
     this.saveUi()
+  }
+
+  // -------------------------------------------------------------------------
+  // The filter bar
+
+  /**
+   * Choose the bar's filters from the history again, if it has changed
+   * materially since the last choice. While the first sync is still running
+   * the choice is provisional and follows the history as it arrives; after
+   * that, a new choice waits until the panel is closed, so filters never move
+   * under the user.
+   */
+  private refreshFilters(): void {
+    const { index, filterPrefs: prefs, open } = this.state
+    if (!index || !this.state.accountKey) return
+    const convs = Object.values(index.conversations)
+    if (!shouldRefresh(prefs, convs.length, index.backfillComplete)) {
+      this.filtersPending = false
+      return
+    }
+    const settled = prefs.complete && prefs.v === PERSONALIZE_VERSION
+    if (open && settled) {
+      this.filtersPending = true
+      return
+    }
+    this.filtersPending = false
+    // Only a settled bar is worth keeping steady; a provisional one (first sync still running) is chosen afresh.
+    const ranked = rankFilters(tally(convs.map(classificationOf)), settled ? visibleFilters(prefs) : [])
+    this.saveFilterPrefs({ ...prefs, ranked, basis: convs.length, complete: index.backfillComplete, v: PERSONALIZE_VERSION })
+  }
+
+  /** Keep a filter in the bar (pinned) or let the automatic choice decide again. */
+  pinFilter(id: FilterId, pinned: boolean): void {
+    if (id === 'all' || !isFilterId(id)) return
+    const p = this.state.filterPrefs
+    const without = p.pinned.filter((x) => x !== id)
+    this.saveFilterPrefs({ ...p, pinned: pinned ? [...without, id] : without, hidden: pinned ? p.hidden.filter((x) => x !== id) : p.hidden })
+  }
+
+  /** Leave a filter out of the automatic choice (it stays in More), or let it back in. */
+  hideFilter(id: FilterId, hidden: boolean): void {
+    if (id === 'all' || !isFilterId(id)) return
+    const p = this.state.filterPrefs
+    const without = p.hidden.filter((x) => x !== id)
+    this.saveFilterPrefs({ ...p, hidden: hidden ? [...without, id] : without, pinned: hidden ? p.pinned.filter((x) => x !== id) : p.pinned })
+  }
+
+  /** Forget pins and hidden filters and choose from the history afresh. */
+  resetFilters(): void {
+    this.filtersPending = false
+    this.store.set({ filterPrefs: emptyFilterPrefs() })
+    const { index } = this.state
+    if (!index) return this.saveFilterPrefs(emptyFilterPrefs())
+    const convs = Object.values(index.conversations)
+    this.saveFilterPrefs({ ...emptyFilterPrefs(), ranked: rankFilters(tally(convs.map(classificationOf))), basis: convs.length, complete: index.backfillComplete, v: PERSONALIZE_VERSION })
+  }
+
+  private saveFilterPrefs(filterPrefs: FilterPrefs): void {
+    this.store.set({ filterPrefs })
+    const key = this.state.accountKey
+    if (key) void this.deps.kv.set({ [KEYS.filters(key)]: filterPrefs }).catch(() => {})
   }
 
   setCurrentPath(path: string): void {
@@ -451,6 +536,7 @@ export class HistoryApp {
     await this.repo.clearAll()
     this.relatedRun++
     this.related.reset()
+    this.filtersPending = false
     this.lastAccountKey = null
     this.store.set((s) => ({
       ...initialState(),
@@ -556,6 +642,8 @@ function sanitizeCollapsed(raw: unknown): Record<string, boolean> {
   }
   return out
 }
+
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now())
 
 function iso(t: number | null): string | null {
   return t == null ? null : new Date(t).toISOString()

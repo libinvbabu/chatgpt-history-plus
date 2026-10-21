@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { MetadataRepository, mergeItems } from '../../src/history/repository'
 import { DEFAULT_SETTINGS, emptyIndex } from '../../src/history/types'
 import { memoryStore } from '../../src/storage'
-import { migrateIndex, migrateSettings } from '../../src/storage/migrations'
+import { migrateFilterPrefs, migrateIndex, migrateSettings } from '../../src/storage/migrations'
 
 describe('stored data validation', () => {
   it('round-trips an index through the repository', async () => {
@@ -47,5 +47,18 @@ describe('stored data validation', () => {
     const kv = memoryStore({ settings: {}, 'idx:k': {}, ui: {} })
     await new MetadataRepository(kv).clearAll()
     expect(await kv.keys()).toEqual([])
+  })
+
+  it('validates filter preferences, mapping ids from older versions and dropping unknown ones', () => {
+    expect(migrateFilterPrefs(undefined)).toEqual({ pinned: [], hidden: [], ranked: [], basis: 0, complete: false, v: 0 })
+    expect(migrateFilterPrefs('junk').pinned).toEqual([])
+    expect(
+      migrateFilterPrefs({ pinned: ['engineering', 'travel', 'travel', 'nope', 7], hidden: ['people'], ranked: ['technology', 'toString'], basis: 120, complete: true, v: 1 }),
+    ).toEqual({ pinned: ['technology', 'travel'], hidden: ['hiring'], ranked: ['technology'], basis: 120, complete: true, v: 1 })
+  })
+
+  it('keeps a stored conversation category, including one from an older version', () => {
+    const idx = migrateIndex({ schemaVersion: 1, accountKey: 'k', conversations: { a: { id: 'a', title: 'x', category: 'people' } } }, 'k')!
+    expect(idx.conversations.a!.category).toBe('people') // read through the legacy map, never rewritten
   })
 })

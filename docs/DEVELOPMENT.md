@@ -39,13 +39,16 @@ src/
   content/        content script: app controller, mount, sidebar observer, navigation
   related/        ← local "related to this chat" engine (pure, unit-tested; see below)
     text.ts         tokenising, stopwords, generic words, light stemmer, aliases
-    dictionary.ts   the data it knows: providers/tools, topics, activity rules, categories
-    extract.ts      rule-based entities (PR, repo, ticket, provider…), topics, activity, category
+    dictionary.ts   the data it knows: providers/tools, topics, activity rules (related engine only)
+    extract.ts      rule-based entities (PR, repo, ticket, provider…), topics, activity
+    taxonomy.ts     categories: 8 primaries, ~50 subcategories, their vocabulary, legacy ids
+    classify.ts     title → primary, subcategory, topics, confidence (precedence rules, memoised)
     engine.ts       inverted index, time-sliced indexing, retrieval, scoring, evidence gate
     reasons.ts      hover explanations built from what actually matched
   ui/             React panel (shadow DOM), custom virtual list, settings, sort and date menus
-    categories.ts   the one category table: filter chips, row icons and labels, the fallback to "Other"
-    CategoryIcon.tsx  the glyphs (Lucide) behind that table; CategoryFilters.tsx  the chip row
+    categories.ts   the one category table: filters, row icons and labels, legacy filter ids, More's list
+    personalize.ts  which filters the bar shows, chosen from the history (pure, unit-tested)
+    CategoryIcon.tsx  the glyphs (Lucide) behind that table; CategoryFilters.tsx  the bar and More
   background/     service worker: toolbar button + optional command → content script
 ```
 
@@ -65,29 +68,65 @@ Notable decisions (and where they differ from the spec's suggestions):
 - **Navigation** clicks ChatGPT's own sidebar link when one exists (client-side routing). Otherwise it does a normal page load and restores the panel's query and scroll afterwards.
 - **Keyboard shortcut** is an in-page listener. The manifest command has no default key, because a suggested key would override Chrome's own ⇧⌘H (Home) in *every* tab.
 
-## Category filters and row icons
+## Categories, filters and row icons
 
-`src/ui/categories.ts` is the single definition both the chips under the search box and the icon beside each row read from. The extractor assigns one of ten categories; the chips group them into eight (All plus seven) (Debugging and Security & access are listed under Engineering, Hiring & people under Other), so every chat is reachable from some chip. A category inherits its label and icon from its chip unless it names its own, so a debugging row keeps its bug icon and "Debugging" tooltip. A stored `category` that is not one of ours, or no signal at all, becomes **Other**. To add a category: add it to `related/dictionary.ts`, one row to `CATEGORIES`, and a glyph to `CategoryIcon.tsx` if it needs its own icon.
+History+ files every conversation, from its title alone, under one **primary category** and, when the title says so clearly, one **subcategory**, plus a few secondary **topic** tags. Nothing is stored per conversation: categories are derived when needed and memoised by title, so a rules change reaches every synced conversation on the next page load, with no migration and no re-sync.
 
-- **Chips stay quiet and on one line.** No numbers on them (the count for the current search and dates is the hover text). The row scrolls sideways and never wraps; a mouse wheel over it scrolls it horizontally (a non-passive listener, so it never reaches the list or the page), an edge fades while more lies beyond it, and the selected chip is scrolled into view on open and on change.
-- **Filtering is local and cheap.** `view.ts` runs search and date first, counts the result per chip, then narrows by the selected chip. Counts therefore say what picking a chip would show. Classification is memoised per title (about 13 µs each, once).
-- **A chip is not a search.** It leaves date groups at the user's own collapse state (Today stays open), where search and date filters expand everything. "Related to this chat" stays, narrowed to the same category.
-- **The choice persists** in the `ui` storage entry next to the collapse state (`category`), and is read once at start-up (other tabs do not change it under you).
+| Primary | Icon (Lucide) | Subcategories |
+|---|---|---|
+| Work | briefcase | Meetings, Career, Hiring, Strategy, Marketing, Sales, Management, Presentations, Product, Analytics, Payments |
+| Learning | graduation-cap | Exam Prep, Research, Mathematics, Science, Languages, History |
+| Writing | pen-line | Emails, Social Posts, Documents, Editing, Messages & Letters |
+| Creative | palette | Design, Images, Stories & Poems, Brainstorming, Content Creation |
+| Technology | code | PR Reviews, Debugging, Architecture, Backend, Frontend, Mobile, AI & ML, Infrastructure, Security |
+| Planning | calendar-check | Scheduling, Goals & Habits, Events, To-dos, Decisions |
+| Personal | heart | Travel, Cooking, Health & Fitness, Parenting, Shopping, Finance, Home, Entertainment |
+| General | message-circle | none: anything the title does not say enough about |
+
+The categories of 0.2 live on as subcategories: Reviews → Technology · PR Reviews, Engineering → Technology, Debugging and Security & access → Technology, Analytics, Payments and Product → Work, Hiring & people → Work · Hiring, Other → General. `LEGACY_CATEGORY_IDS` in `taxonomy.ts` maps the old ids wherever they turn up (a remembered filter, a stored `category`).
+
+A row shows its subcategory's icon where that glyph says more than its primary's (a bug for Debugging, a plane for Travel, a pull request for PR Reviews), else its primary's. Hover text is "Technology · Debugging".
 
 ### How a conversation gets its category
 
-`related/categorize.ts`, with its vocabulary in `CATEGORY_SIGNALS` / `PR_REVIEW_SIGNALS` in `related/dictionary.ts` (kept apart from `TOPICS` and `ACTIVITY_RULES`, which drive "Related to this chat": teaching the icon a word never changes what counts as related). Precedence:
+`related/classify.ts`, with its vocabulary in `related/taxonomy.ts`. **Kept apart from** `TOPICS` and `ACTIVITY_RULES` in `dictionary.ts`, which drive "Related to this chat": `extract()` no longer computes a category at all, and the related engine never sees one, so teaching a category a word cannot change what counts as related (`tests/unit/related.test.ts` checks that chats sharing only a category are never suggested).
 
-1. **A stored `category`** on the conversation (an import or a future manual choice) wins (`categoryFor`). It survives reloads and syncs.
-2. **Entities** the extractor recognised: a PR reference makes it a PR review; providers lean Payments; analytics tools (Mixpanel, CleverTap…) lean Analytics; other tools lean Engineering. History+ stores titles only, so there is no message content to use.
-3. **The title**, normalised (lower case, punctuation as spaces). A PR, "code review" or "review … changes/diff/commits" is a **PR review, whatever it is about**. Otherwise every category is scored by the distinct keywords it matches (weight 3 settles it, 2 is clear, 1 is a hint; the last word, which usually names the activity, tips a close call), then:
-   - Payments yields to Engineering/Debugging when the title is about building or fixing the system ("Paytm PreNotify architecture").
-   - A clear fault ("crash", "not showing", "debug") makes an engineering title Debugging.
-   - A message about hiring is People, not Writing ("Draft interview heads up").
-   - Personal topics (trip, workout, recipe…) outweigh a lone "plan" or "ideas".
-4. **Other** when the best score is under 2: one weak hint is never enough.
+Every subcategory, and each primary's own vocabulary (words that name the area but no part of it, like "homework"), is a **facet** with weighted patterns: 3 settles it, 2 is clear, 1 is a hint. Each word counts once per facet. Known tools and providers add their weight to a facet (Mixpanel → Analytics, Kubernetes → Infrastructure, a payments provider → Payments). A primary scores the sum of its facets. A signal in the **head** of the title, the words before its first preposition (or the last word when there is none), adds a point: "Poster for a music festival" is about a poster. Then, first match wins:
 
-Categories are derived when the list renders and memoised per title for the page's lifetime; they are never written to storage. A rules change therefore reaches every previously synced conversation on the next page load, with no migration and no re-sync. `tests/unit/fixtures/category-titles.ts` is the audit set (63 titles, including the ambiguous "review", "payment", "plan" and "analysis" cases); `tests/unit/categorize.test.ts` pins each one.
+1. A stored `category` (an import or a future manual choice), legacy ids mapped.
+2. A PR, "code review" or "review … changes/diff/commits" → Technology · PR Reviews, whatever it is about.
+3. An explicit "debug" → Technology · Debugging.
+4. The highest primary, ties to the more specific reading (Technology, Work, Learning, Writing, Personal, Creative, Planning), then:
+   - **Planning is an activity more often than a subject.** With only "plan"/"organize", any clear subject wins ("Plan a family trip to Kerala" → Personal · Travel). With a planning format (schedule, checklist, decision), a decisive subject wins ("Plan the product launch checklist" → Work · Product). A planning subject keeps it ("Plan my daughter's birthday party" → Planning · Events).
+   - Payments yields to Technology when the title is about building or fixing the system ("Paytm PreNotify architecture").
+   - **A message about hiring is hiring work**, not writing ("Draft interview heads up" → Work · Hiring).
+   - Personal and Learning yield to a clearly technical title ("Health app architecture" → Technology).
+   - Generic faults ("not working", "broken") count toward Debugging only in an already technical title, so "my washing machine is not working" stays out of Technology.
+5. **General** when the best score is under 2: one weak hint is never enough.
+
+The subcategory is the primary's best facet with a score of 2 or more (a clear fault in a technical title is always Debugging). **Confidence** comes from the evidence: *high* when a rule settled it or a decisive word leads by 2+, *medium* for a clear lead, *low* for a tie broken by order or weak hints only, *none* for General. Only medium and high count toward choosing filters.
+
+Measured: about 45 µs per title, once. After each sync the app classifies new titles in 8 ms slices before the related engine indexes, so the list renders from the memo; counting and filtering 10,000 chats then takes under 1 ms.
+
+Test sets (`tests/unit/fixtures/`): `category-titles.ts`, the 63-title developer audit from 0.2 carried over (62 unchanged; "Mobile game ideas" is now Personal · Entertainment at low confidence); `personas.ts`, 149 titles from seven kinds of user plus 23 deliberately misleading ones, all filed as a person would; and a 50-title held-out set that was never used for tuning (94% exact, 98% primary when written; the test asserts 90%/95%). On the persona set, 0.2's rules put 39% of titles in the right primary and 50% under Other.
+
+### The filter bar
+
+`ui/personalize.ts`. Nobody is asked what they do; the bar is chosen from the history:
+
+1. Count conversations per primary and subcategory (medium confidence or better).
+2. Eligible: at least 3 conversations and 5% of the history; a subcategory also needs 5 conversations and 15–90% of its primary (one that is nearly all of it would only repeat it). General is never chosen; it is in More.
+3. The three largest families (a primary and its subcategories) with at least 5% each get a slot, so one dominant area cannot fill the bar.
+4. Every other eligible filter follows by size, at most 3 per family while another family has something eligible.
+5. Ties go to taxonomy order. The bar shows the first 5, each family together, primary first. Thresholds are in `PERSONALIZE`.
+
+**Stability.** The choice (`ranked`), with the history size it came from, is stored per account under `flt:<accountKey>`. It is made again only when the history changes by at least 25 conversations and 10% (50% while the first sync runs), when the first sync completes, or when `PERSONALIZE_VERSION` changes. Once settled, a new choice never lands while the panel is open: it waits for it to close. Filters already in the bar count 1.2× when choosing again, so near-ties do not swap. The selected filter is never moved: picked from More, it joins the end of the row while selected.
+
+**Customize.** More → *Customize filters*: pin (always in the bar, first, even with nothing in it) or hide (never chosen automatically; still in More). *Reset to automatic* clears both and chooses afresh. Settings has the same reset. Pins and hides are per account, so a personal account and a Team workspace keep their own.
+
+**The row and More.** One row that scrolls sideways and never wraps: no numbers on chips (the count for the current search and dates is the hover text), a mouse wheel scrolls it horizontally, an edge fades while more lies beyond it, and the selected chip is scrolled into view. More stays at the right edge outside the scrolling part. It lists every primary (always) and each subcategory the history has, grouped and indented, with counts for the current search and dates, a search box, and arrow-key navigation. `view.ts` runs search and date first, counts the result per filter, then narrows by the selected one, so counts say what picking a filter would show. A filter is not a search: date groups keep the user's collapse state (Today stays open), and "Related to this chat" stays, narrowed to the same filter.
+
+**Migration from 0.2.** No schema change. The selected chip in `ui.category` is mapped on read (`engineering` → `technology`, `other` → `general`; unknown → All). Stored conversation categories are mapped through the same table. Nothing is re-synced and nothing is rewritten.
 
 ## Time format
 
@@ -143,10 +182,10 @@ npm run test:e2e
 npm run typecheck
 ```
 
-- `npm test` runs 80 unit tests: dates, date phrases, search and operators, grouping, schemas, retry/backoff, adapter, sync stop and resume, rate-limit pacing and cooldowns, migrations, the app controller (including a clear-during-sync race), and a 10k-row performance check. They run in `America/New_York` to catch DST bugs.
+- `npm test` runs 268 unit tests: dates, date phrases, search and operators, grouping, schemas, retry/backoff, adapter, sync stop and resume, rate-limit pacing and cooldowns, migrations, the app controller (including a clear-during-sync race), category classification across seven user personas, filter personalization and stability, related-conversation regressions, and 10k-row performance checks. They run in `America/New_York` to catch DST bugs.
 - `npm run test:e2e` builds the extension, loads it into Chromium, and drives a mock chatgpt.com (`tests/e2e/mock-chatgpt.ts`: the current and 2025 sidebar layouts, session, paginated API, all synthetic data). It covers sync pacing, waiting out 429s with a countdown, search without network, date phrases, keyboard and navigation, panel restore, collapse persistence, offline cache, signed-out state, 429 backoff, full resync and deletion, clearing data, the sidebar being removed, and 10,000 conversations.
-- Other scripts: `npm run watch` (dev build), `npm run zip` (store package, see Releasing), `npm run icons`, `SHOTS=/tmp/shots npx playwright test screenshots` (UI captures). `npm run promo` records the promotional videos and YouTube thumbnail from the real extension on synthetic history ([scripts/promo/README.md](../scripts/promo/README.md)).
-- Bundle: `content.js` is about 317 KB minified, 98 KB gzipped.
+- Other scripts: `npm run watch` (dev build), `npm run zip` (store package, see Releasing), `npm run icons`, `SHOTS=/tmp/shots npx playwright test screenshots` (UI captures; `-g "capture categories"` for the filter bar, More, Customize, light/dark and three widths). `npm run promo` records the promotional videos and YouTube thumbnail from the real extension on synthetic history ([scripts/promo/README.md](../scripts/promo/README.md)).
+- Bundle: `content.js` is about 405 KB minified, 129 KB gzipped (the category vocabulary and classifier add about 36 KB, 13 KB gzipped, over 0.2).
 - Measured with 10,000 conversations: search to rendered results in about 11 ms, and the panel opens in under 100 ms.
 
 ## Releasing
