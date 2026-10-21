@@ -145,7 +145,7 @@ npm run typecheck
 
 - `npm test` runs 80 unit tests: dates, date phrases, search and operators, grouping, schemas, retry/backoff, adapter, sync stop and resume, rate-limit pacing and cooldowns, migrations, the app controller (including a clear-during-sync race), and a 10k-row performance check. They run in `America/New_York` to catch DST bugs.
 - `npm run test:e2e` builds the extension, loads it into Chromium, and drives a mock chatgpt.com (`tests/e2e/mock-chatgpt.ts`: the current and 2025 sidebar layouts, session, paginated API, all synthetic data). It covers sync pacing, waiting out 429s with a countdown, search without network, date phrases, keyboard and navigation, panel restore, collapse persistence, offline cache, signed-out state, 429 backoff, full resync and deletion, clearing data, the sidebar being removed, and 10,000 conversations.
-- Other scripts: `npm run watch` (dev build), `npm run zip` (store package, see Releasing), `npm run icons`, `SHOTS=/tmp/shots npx playwright test screenshots` (UI captures).
+- Other scripts: `npm run watch` (dev build), `npm run zip` (store package, see Releasing), `npm run icons`, `SHOTS=/tmp/shots npx playwright test screenshots` (UI captures). `npm run promo` records the promotional videos and YouTube thumbnail from the real extension on synthetic history ([scripts/promo/README.md](../scripts/promo/README.md)).
 - Bundle: `content.js` is about 317 KB minified, 98 KB gzipped.
 - Measured with 10,000 conversations: search to rendered results in about 11 ms, and the panel opens in under 100 ms.
 

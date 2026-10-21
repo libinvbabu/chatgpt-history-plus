@@ -5,3 +5,8 @@ playwright-report/
 *.zip
 .DS_Store
 release/
+marketing/raw/
+
+# Promo video: intermediate recordings, and the rendered videos (regenerate with npm run promo)
+.promo/
+marketing/promo/*.mp4
