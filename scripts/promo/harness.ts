@@ -122,6 +122,8 @@ export class Pointer {
   /** Point at an element: `fx`/`fy` are fractions of its box (default: centre). */
   async to(target: Locator, at: { fx?: number; fy?: number; ms?: number } = {}) {
     await expect(target).toBeVisible()
+    // Visible is not enough: an item scrolled out of its list is "visible" but off screen.
+    await expect(target).toBeInViewport()
     const box = (await target.boundingBox())!
     await this.glide(box.x + box.width * (at.fx ?? 0.5), box.y + box.height * (at.fy ?? 0.5), at.ms)
   }

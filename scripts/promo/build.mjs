@@ -54,12 +54,12 @@ const WIDE_CAPTIONS = [
   { from: 0.3, to: marks['hook:open'] + 0.2, title: 'Too many ChatGPT conversations?' },
   { from: marks['hook:open'] + 0.3, to: marks.search - 0.1, title: 'Find the right one in seconds.' },
   { from: marks.search, to: marks.category - 0.1, eyebrow: 'Search', title: 'Search your ChatGPT history instantly.', sub: 'Results narrow as you type. Search matches chat titles.' },
-  { from: marks.category, to: marks.dates - 0.1, eyebrow: 'Filter', title: 'Organize by topic.', sub: 'Reviews, Engineering, Analytics, Payments and more, each with its own icon.' },
+  { from: marks.category, to: marks.dates - 0.1, eyebrow: 'Filter', title: 'Organize by topic.', sub: 'Smart categories, with filters picked from your own history. Every category is under More.' },
   { from: marks.dates, to: marks.related - 0.1, eyebrow: 'Browse', title: 'Jump back to any conversation.', sub: 'Today, Yesterday, last week, and every month before.' },
   { from: marks.related, to: marks.end, eyebrow: 'Rediscover', title: 'Pick up where you left off.', sub: 'Related chats appear for the one you’re in. All on your device.' },
 ]
 
-/** The vertical cut ends once an older chat is open. */
+/** The vertical cut (opt-in, --social) ends once an older chat is open. */
 const SOCIAL = { from: 0, to: marks['dates:opened'] + 1.4 }
 const TALL_CAPTIONS = [
   { from: 0.3, to: marks.search - 0.1, title: 'Can’t find an old ChatGPT conversation?' },
@@ -418,18 +418,21 @@ if (voice) {
   console.log(resolve(OUT, 'history-plus-demo.en.srt'))
 }
 
-const c = TALL.crop
-const socialLength = SOCIAL.to - SOCIAL.from
-const tall = await renderVideo({
-  name: 'history-plus-social.mp4',
-  size: { w: TALL.w, h: TALL.h, recX: TALL.card.x, recY: TALL.card.y },
-  frameList: await frameList('tall', SOCIAL.from, SOCIAL.to),
-  length: socialLength,
-  place: `crop=${c.w * dpr}:${c.h * dpr}:${c.x * dpr}:${c.y * dpr},scale=${TALL.card.w}:${TALL.card.h}:flags=lanczos`,
-  frame: png('frame-tall'),
-  captions: tallCaps.map((x) => ({ ...x, from: x.from - SOCIAL.from, to: x.to - SOCIAL.from })),
-  capPos: { x: 40, y: 118 },
-  endCard: png('end-tall'),
-})
-console.log(tall, await probe(tall))
+// The vertical cut is opt-in: npm run promo:build -- --social
+if (process.argv.includes('--social')) {
+  const c = TALL.crop
+  const socialLength = SOCIAL.to - SOCIAL.from
+  const tall = await renderVideo({
+    name: 'history-plus-social.mp4',
+    size: { w: TALL.w, h: TALL.h, recX: TALL.card.x, recY: TALL.card.y },
+    frameList: await frameList('tall', SOCIAL.from, SOCIAL.to),
+    length: socialLength,
+    place: `crop=${c.w * dpr}:${c.h * dpr}:${c.x * dpr}:${c.y * dpr},scale=${TALL.card.w}:${TALL.card.h}:flags=lanczos`,
+    frame: png('frame-tall'),
+    captions: tallCaps.map((x) => ({ ...x, from: x.from - SOCIAL.from, to: x.to - SOCIAL.from })),
+    capPos: { x: 40, y: 118 },
+    endCard: png('end-tall'),
+  })
+  console.log(tall, await probe(tall))
+}
 console.log(THUMBNAIL)

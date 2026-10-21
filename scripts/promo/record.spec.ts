@@ -105,25 +105,45 @@ test('record promo storyboard', async () => {
     await sleep(1100)
     await settle('search')
 
-    // Scene 3, category chips: each one narrows the same list by topic.
+    // Scene 3, categories: a filter from the bar (chosen from this history), then any category from More.
     mark('category')
     await pointer.click(panel(page).getByRole('button', { name: 'Clear search' }))
     await expect(search(page)).toHaveValue('')
     await sleep(500)
-    for (const label of STORY.chips) {
-      await pointer.click(chip(page, label))
-      await expect(chip(page, label)).toHaveAttribute('aria-pressed', 'true')
-      await expect(titles(page).first()).toBeVisible()
-      mark(`category:${label}`)
-      await sleep(1700)
-    }
+    const { chip: barPick, more: morePick } = STORY.categories
+    await pointer.click(chip(page, barPick.label))
+    await expect(chip(page, barPick.label)).toHaveAttribute('aria-pressed', 'true')
+    await expect(row(page, barPick.shows)).toBeVisible()
+    await expect(row(page, morePick.shows)).toBeHidden()
+    mark('category:bar')
+    await sleep(1500)
+    // More lists every category, grouped, with counts; the one picked joins the bar while selected.
+    await pointer.click(panel(page).locator('.cat-more'))
+    const menu = panel(page).locator('.cat-menu')
+    await expect(menu).toBeVisible()
+    mark('category:more')
+    await sleep(1200)
+    // More's own search box has focus; a few letters find any category.
+    await expect(menu.getByPlaceholder('Find a category')).toBeFocused()
+    await menu.getByPlaceholder('Find a category').pressSequentially(morePick.find, { delay: 130 })
+    await sleep(700)
+    await pointer.click(menu.locator(`.cat-item[data-id="${morePick.id}"]`), { fx: 0.3 })
+    await expect(menu).toBeHidden()
+    await expect(chip(page, morePick.label)).toHaveAttribute('aria-pressed', 'true')
+    await expect(row(page, morePick.shows)).toBeVisible()
+    await expect(row(page, barPick.shows)).toBeHidden()
+    mark('category:picked')
+    await sleep(1600)
     await settle('category')
 
     // Scene 4, dates: back to everything, open the date groups, jump to an older chat.
     mark('dates')
-    await pointer.click(chip(page, 'All'))
+    // Clicking the selected filter again clears it (the row has scrolled to keep that filter in view).
+    await pointer.click(chip(page, STORY.categories.more.label))
     await expect(chip(page, 'All')).toHaveAttribute('aria-pressed', 'true')
-    await sleep(500)
+    // The row shifts as that filter leaves it; move off so the pointer isn't left on another chip.
+    await pointer.glide(pointer.x - 30, pointer.y + 110, 380)
+    await sleep(250)
     // Today and Yesterday are in view; open an older week, then scroll (a real wheel scroll) to its chats.
     await pointer.click(group(page, STORY.group), { fx: 0.25 })
     await expect(group(page, STORY.group)).toHaveAttribute('aria-expanded', 'true')

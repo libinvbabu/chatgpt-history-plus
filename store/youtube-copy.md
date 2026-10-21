@@ -1,6 +1,6 @@
 # YouTube and Chrome Web Store: promo video
 
-Files: `marketing/promo/history-plus-demo.mp4` (16:9, upload this one to YouTube), `marketing/promo/history-plus-social.mp4` (9:16, for Shorts, Reels, LinkedIn and X), and `store/youtube-thumbnail.png` (1280×720). The videos are gitignored; generate them with `npm run promo` (see [scripts/promo/README.md](../scripts/promo/README.md)).
+Files: `marketing/promo/history-plus-demo.mp4` (16:9, upload this one to YouTube), `marketing/promo/history-plus-social.mp4` (9:16, for Shorts, Reels, LinkedIn and X; build it with `npm run promo:build -- --social`), and `store/youtube-thumbnail.png` (1280×720). The videos are gitignored; generate them with `npm run promo` (see [scripts/promo/README.md](../scripts/promo/README.md)).
 
 ## Title
 
@@ -11,7 +11,7 @@ History+ for ChatGPT — Find Old Conversations Instantly
 ```
 History+ is a free Chrome extension that makes ChatGPT history easier to search, browse and organize.
 
-Find conversations by title, filter by category, and navigate your history by date. When you open a chat, History+ shows related ones. Everything runs locally in your browser.
+Find conversations by title, filter by smart categories picked from your own history, and navigate your history by date. When you open a chat, History+ shows related ones. Everything runs locally in your browser.
 
 Try History+:
 https://chromewebstore.google.com/detail/aeedfmgfjdpgbnfjddpommjjagdobacj

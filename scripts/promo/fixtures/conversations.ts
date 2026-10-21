@@ -149,8 +149,15 @@ export const STORY = {
   query: 'payment',
   /** Opened from the search results. */
   searchPick: 'Compare payment providers for international cards',
-  /** Category chips, by their label in the UI. */
-  chips: ['Reviews', 'Analytics'] as const,
+  /**
+   * Category filters. The bar is chosen by History+ from this history (Work, Analytics, Technology,
+   * Backend, Writing); PR Reviews ranks below it, so it is found in More by typing `find`. `shows` is a chat
+   * the filter must show (and the other filter must hide).
+   */
+  categories: {
+    chip: { label: 'Analytics', shows: 'Analyze revenue dashboard drop' },
+    more: { id: 'pr-reviews', label: 'PR Reviews', find: 'review', shows: 'Review backend pull request #482' },
+  },
   /** The date group expanded, by label. */
   group: 'Last week',
   /** Opened from "Last week"; has related chats (same PR). */
