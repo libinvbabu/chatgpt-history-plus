@@ -9,7 +9,8 @@ import { buildRelatedRows, type RelatedEntry } from '../history/related-rows'
 import { inRanges, makeSearchDoc, matches, parseQuery, type FieldRange, type ParsedQuery, type SearchDoc } from '../history/search'
 import { effectiveTime, type HistoryIndex, type Settings, type StoredConversation } from '../history/types'
 import type { DateFilter, PresetId } from '../content/store'
-import { classificationOf, matchesFilter, type FilterId } from './categories'
+import type { Classification } from '../related/classify'
+import { classificationOf, knownClassificationOf, matchesFilter, type FilterId } from './categories'
 
 export const PRESETS: Array<{ id: PresetId; label: string; phrase: string }> = [
   { id: 'today', label: 'Today', phrase: 'today' },
@@ -76,11 +77,15 @@ export interface HistoryView {
   total: number
 }
 
-/** Each conversation counts once under its primary and once under its subcategory, if it has one. */
-export function countByCategory(entries: readonly Entry[]): CategoryCounts {
+/**
+ * Each conversation counts once under its primary and once under its subcategory, if it has one.
+ * `classOf` may return null for one not classified yet: it counts toward All only, until it is.
+ */
+export function countByCategory(entries: readonly Entry[], classOf: (conv: Entry['conv']) => Classification | null = classificationOf): CategoryCounts {
   const counts: CategoryCounts = new Map([['all', entries.length]])
   for (const e of entries) {
-    const c = classificationOf(e.conv)
+    const c = classOf(e.conv)
+    if (!c) continue
     counts.set(c.primary, (counts.get(c.primary) ?? 0) + 1)
     if (c.sub) counts.set(c.sub, (counts.get(c.sub) ?? 0) + 1)
   }
@@ -90,6 +95,8 @@ export function countByCategory(entries: readonly Entry[]): CategoryCounts {
 export function useHistoryView(args: {
   index: HistoryIndex | null
   indexRev: number
+  /** Bumped when the background pass has classified new titles. */
+  classifiedRev: number
   settings: Settings
   query: string
   literal: boolean
@@ -101,7 +108,7 @@ export function useHistoryView(args: {
   /** Chats related to the open one; shown above Today when not searching. */
   related: readonly RelatedEntry[]
 }): HistoryView {
-  const { index, indexRev, settings, query, literal, dateFilter, category, collapsed, transientCollapsed, ctx, related } = args
+  const { index, indexRev, classifiedRev, settings, query, literal, dateFilter, category, collapsed, transientCollapsed, ctx, related } = args
   const mode = settings.timestampMode
 
   const sorted = useMemo(() => {
@@ -121,9 +128,19 @@ export function useHistoryView(args: {
     const extra = filterRange ? [filterRange] : []
     return sorted.filter((e) => matches(e.conv, docFor(e.conv), parsed, mode) && inRanges(e.conv, extra, mode))
   }, [sorted, parsed, filterRange, filtering, mode])
-  const categoryCounts = useMemo(() => countByCategory(scoped), [scoped])
-  const historyCounts = useMemo(() => (scoped === sorted ? categoryCounts : countByCategory(sorted)), [sorted, scoped, categoryCounts])
-  const entries = useMemo(() => (category === 'all' ? scoped : scoped.filter((e) => matchesFilter(classificationOf(e.conv), category))), [scoped, category])
+  // Categories come from the memo only (see knownClassificationOf); `classifiedRev` recounts once the background pass is done.
+  const historyCounts = useMemo(() => countByCategory(sorted, knownClassificationOf), [sorted, classifiedRev])
+  const categoryCounts = useMemo(() => (filtering ? countByCategory(scoped, knownClassificationOf) : historyCounts), [filtering, scoped, historyCounts, classifiedRev])
+  const entries = useMemo(
+    () =>
+      category === 'all'
+        ? scoped
+        : scoped.filter((e) => {
+            const c = knownClassificationOf(e.conv)
+            return c !== null && matchesFilter(c, category)
+          }),
+    [scoped, category, classifiedRev],
+  )
 
   const chronological = useMemo(
     () =>

@@ -369,11 +369,16 @@ export const FAULT_SIGNALS: Signals = [
 
 /** A title that names a pull request, or a review of code, is a PR review whatever it is about. */
 export const PR_REVIEW_SIGNALS: RegExp[] = [
-  /\b(pr|prs|pull requests?|merge requests?)\b/, // not "MR": too often a person ("Mr Sharma")
+  // Not "MR": too often a person ("Mr Sharma"). Not "PR" in public relations ("PR campaign", "PR pitch").
+  /\b(pr|prs)\b(?! (?:campaigns?|pitch(?:es)?|agenc(?:y|ies)|strateg(?:y|ies)|firms?|teams?|statements?|outreach|crisis|stunts?|coverage|kits?|plans?|releases?|people|professionals?)\b)/,
+  /\b(pull requests?|merge requests?)\b/,
   /\bcode ?reviews?\b/,
-  // "Review Kisan backend changes", "review the diff", "reviewing my commits"
-  /\breview(?:ing|ed)? (?:\S+ ){0,3}(?:changes|diffs?|commits?|code|branch|patch(?:es)?)\b/,
+  // "review the diff", "reviewing my commits"
+  /\breview(?:ing|ed)? (?:\S+ ){0,3}(?:diffs?|commits?|code|branch|patch(?:es)?)\b/,
 ]
+
+/** "Review Kisan backend changes" is a code review only in a technical title: not "Review contract changes". */
+export const PR_CHANGES_SIGNAL = /\breview(?:ing|ed)? (?:\S+ ){0,3}changes\b/
 
 /** "Debug …" names the activity outright: debugging, whatever is being debugged. */
 export const DEBUG_VERB = /\bdebug(?:s|ged|ging)?\b/

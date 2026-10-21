@@ -181,17 +181,20 @@ export class HistoryApp {
     const run = ++this.relatedRun
     const yieldToPage = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
     const titles = Object.values(this.state.index?.conversations ?? {}).map((c) => c.title)
+    let classified = 0
     for (let i = 0; i < titles.length; ) {
       const until = now() + RELATED_SLICE_MS
       while (i < titles.length && now() < until) {
         const t = titles[i++]!
-        if (!isClassified(t)) classifyTitle(t)
+        if (!isClassified(t)) (classifyTitle(t), classified++)
       }
       if (i < titles.length) {
         await yieldToPage()
         if (run !== this.relatedRun) return
       }
     }
+    // The list counts and filters from the memo only; let it catch up.
+    if (classified) this.store.set((s) => ({ classifiedRev: s.classifiedRev + 1 }))
     this.refreshFilters()
 
     this.related.plan(this.state.index)
@@ -240,7 +243,7 @@ export class HistoryApp {
 
   private async useAccount(accountKey: string): Promise<void> {
     if (this.state.accountKey === accountKey && this.state.index) return
-    const [index, filterPrefs] = await Promise.all([this.repo.load(accountKey), this.deps.kv.get(KEYS.filters(accountKey)).then(migrateFilterPrefs)])
+    const [index, filterPrefs] = await Promise.all([this.repo.load(accountKey), this.deps.kv.get(KEYS.filters(accountKey)).then(migrateFilterPrefs, () => emptyFilterPrefs())])
     this.filtersPending = false
     this.store.set((s) => ({ accountKey, index, indexRev: s.indexRev + 1, filterPrefs }))
     if (this.lastAccountKey !== accountKey) {
@@ -480,7 +483,8 @@ export class HistoryApp {
   private saveFilterPrefs(filterPrefs: FilterPrefs): void {
     this.store.set({ filterPrefs })
     const key = this.state.accountKey
-    if (key) void this.deps.kv.set({ [KEYS.filters(key)]: filterPrefs }).catch(() => {})
+    // Tagged with this tab, so other tabs follow the change (onStorageChanged) and this one ignores its own echo.
+    if (key) void this.deps.kv.set({ [KEYS.filters(key)]: { ...filterPrefs, writer: WRITER_ID } }).catch(() => {})
   }
 
   setCurrentPath(path: string): void {
@@ -618,6 +622,9 @@ export class HistoryApp {
       if (ui?.writer !== WRITER_ID) this.store.set({ collapsed: sanitizeCollapsed(ui?.collapsed) })
     }
     if (s.accountKey) {
+      const filters = changes[KEYS.filters(s.accountKey)]
+      // Another tab pinned, hid or re-chose filters: follow it, so this tab never writes stale ones back.
+      if (filters && (filters.newValue as { writer?: string } | undefined)?.writer !== WRITER_ID) this.store.set({ filterPrefs: migrateFilterPrefs(filters.newValue) })
       const key = KEYS.index(s.accountKey)
       if (key in changes && !s.sync.running) {
         const value = changes[key]!.newValue as StoredIndex | undefined

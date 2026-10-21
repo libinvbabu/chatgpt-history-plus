@@ -45,6 +45,7 @@ import {
   FACET_SIGNALS,
   FAULT_SIGNALS,
   LEGACY_CATEGORY_IDS,
+  PR_CHANGES_SIGNAL,
   PR_REVIEW_SIGNALS,
   PRIMARY_IDS,
   SUBCATEGORIES,
@@ -183,7 +184,8 @@ export function classify(title: string, entities: readonly Entity[] = extractEnt
   const s = scoreTitle(text, entities)
   const topics = (chosen: string | null) => topicsFrom(s, entities, chosen)
 
-  if (entities.some((e) => e.type === 'pr') || PR_REVIEW_SIGNALS.some((re) => re.test(text))) return result('technology', 'pr-reviews', 'high', topics('pr-reviews'))
+  const prReview = entities.some((e) => e.type === 'pr') || PR_REVIEW_SIGNALS.some((re) => re.test(text)) || (s.primaries.technology > 0 && PR_CHANGES_SIGNAL.test(text))
+  if (prReview) return result('technology', 'pr-reviews', 'high', topics('pr-reviews'))
   if (DEBUG_VERB.test(text)) return result('technology', 'debugging', 'high', topics('debugging'))
 
   const p = s.primaries
@@ -279,6 +281,11 @@ export function migrateCategoryId(v: unknown): string | null {
 export const parentOf = (id: string): PrimaryId | null => SUB_PARENT.get(id) ?? (PRIMARY_SET.has(id) ? (id as PrimaryId) : null)
 
 const stored = new Map<string, Classification>()
+
+/** The classification if it is already known (stored, or memoised), without classifying now; null while it is pending. */
+export function knownCategory(conv: { title: string; category?: string | null }): Classification | null {
+  return conv.category && migrateCategoryId(conv.category) ? categoryFor(conv) : (cache.get(conv.title) ?? null)
+}
 
 /** A stored category if something supplied a valid one (an import, a manual choice), else the title rules. */
 export function categoryFor(conv: { title: string; category?: string | null }): Classification {

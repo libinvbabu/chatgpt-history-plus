@@ -12,7 +12,7 @@
 // more than its primary's (a bug for Debugging, a plane for Travel). A row
 // shows its subcategory's icon when there is one, else its primary's.
 
-import { categoryFor, isCategoryNodeId, migrateCategoryId, parentOf, type Classification } from '../related/classify'
+import { categoryFor, isCategoryNodeId, knownCategory, migrateCategoryId, parentOf, type Classification } from '../related/classify'
 import { PRIMARY_IDS, PRIMARY_LABELS, SUBCATEGORIES, type PrimaryId } from '../related/taxonomy'
 
 /** Names of the glyphs in CategoryIcon.tsx. */
@@ -136,6 +136,13 @@ export function categoryDisplay(c: Classification): CategoryDisplay {
 
 /** A conversation's classification, from its stored category or else its title. */
 export const classificationOf = (conv: { title: string; category?: string | null }): Classification => categoryFor(conv)
+
+/**
+ * The same, but only if already known; null while the app's background pass has
+ * not reached the title yet. The list reads this, so rendering never classifies
+ * a whole history in one task (the pass bumps `classifiedRev` when it is done).
+ */
+export const knownClassificationOf = (conv: { title: string; category?: string | null }): Classification | null => knownCategory(conv)
 
 /**
  * What the More menu lists: every primary; a subcategory once the history has
