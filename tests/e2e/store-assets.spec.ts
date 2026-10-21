@@ -16,7 +16,9 @@ test('screenshots (1280x800)', async ({ page, server }) => {
   await page.goto(`https://chatgpt.com/c/${recent.id}`)
   await openPanel(page)
   await waitForSync(page, 650)
+  // The panel opens under the pointer; move it off and let hover fades finish, so no chip looks half-selected.
   await page.mouse.move(1000, 700)
+  await page.waitForTimeout(300)
   await page.screenshot({ path: out('screenshot-1-timeline.png') })
 
   await search(page).fill('roadmap')

@@ -31,10 +31,11 @@ Find any old ChatGPT conversation by when it happened.
 You remember discussing something "around the third week of August" but not what the chat was called. ChatGPT's sidebar keeps only recent chats close at hand, and its search needs the right words. History+ adds the missing piece: time.
 
 WHAT YOU GET
-• Your whole history, grouped by date: Today, Yesterday, This week, Last week, then months and years, with week and day dividers.
+• Your whole history, grouped by date: Today, Yesterday, This week, Last week, then Older conversations month by month, with week and day dividers.
+• Category filters: Reviews, Engineering, Analytics, Product, Payments, Writing. A small icon on each chat shows its kind at a glance, worked out on your device from the title.
 • Dates beside every conversation in ChatGPT's own sidebar.
 • Instant search that understands dates: "roadmap last month", "around sep 14", "invoice in aug", "created:2026-07".
-• Switch between Last active and Created dates; hover any chat to see both.
+• Switch between Last active and Created dates; hover any chat to see both. 12- or 24-hour times.
 • Keyboard-first: ⇧⌘H / Ctrl+Shift+H to open, ↑ ↓ to move, Enter to open, Esc to close.
 • Opens beside the chat, so you can click through candidates without losing your place.
 • Works with personal and Team/Business workspaces (separate caches), in light and dark mode.
@@ -112,6 +113,6 @@ Paste into the "Test instructions" field if the dashboard offers it, otherwise i
 2. Open History+ from the "History+" item in ChatGPT's left sidebar, with Ctrl+Shift+H (⇧⌘H on macOS), or with the toolbar icon.
 3. The panel syncs conversation titles and dates (progress is shown), then groups them by date.
 4. Type in the search box, e.g. a word from a chat title, or "last week". Click a result to open that conversation.
-5. Settings (gear icon) → "Clear local data" removes everything the extension stored.
+5. Settings (sliders icon, top right) → "Clear local data" removes everything the extension stored.
 The extension only runs on chatgpt.com and makes requests only to chatgpt.com.
 ```
