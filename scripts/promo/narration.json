@@ -1,0 +1,13 @@
+{
+  "$comment": "Voice-over for the 16:9 video. `mark` is where the line starts (a mark in the recording's timeline, plus `offset` seconds); the recorder holds a scene until its line has finished, before `next`. `say` is what Kokoro reads (spelled for pronunciation); `text` is the subtitle. Only claim what ships: search matches titles.",
+  "voice": "af_heart",
+  "speed": 1.0,
+  "lines": [
+    { "id": "hook", "mark": "start", "next": "search", "offset": 0.4, "text": "Too many ChatGPT chats? History+ finds the right one in seconds.", "say": "Too many ChatGPT chats? History Plus finds the right one in seconds." },
+    { "id": "search", "mark": "search", "next": "category", "offset": 0.3, "text": "Start typing, and the list narrows instantly to matching titles.", "say": "Start typing, and the list narrows instantly to matching titles." },
+    { "id": "category", "mark": "category", "next": "dates", "offset": 0.3, "text": "Filter by topic: reviews, engineering, analytics, and more.", "say": "Filter by topic: reviews, engineering, analytics, and more." },
+    { "id": "dates", "mark": "dates", "next": "related", "offset": 0.3, "text": "Or browse by date. Today, last week, or months ago.", "say": "Or browse by date. Today, last week, or months ago." },
+    { "id": "related", "mark": "related", "next": "end", "offset": 0.3, "text": "Open a chat, and History+ shows related ones. All on your device.", "say": "Open a chat, and History Plus shows related ones. All on your device." },
+    { "id": "end", "mark": "end", "next": null, "offset": 0.1, "text": "History+. Free on the Chrome Web Store.", "say": "History Plus. Free on the Chrome Web Store." }
+  ]
+}

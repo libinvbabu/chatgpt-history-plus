@@ -4,7 +4,7 @@
 // `npm run promo:build` turns the frames into the videos. See README.md.
 
 import { chromium, expect, test, type Page } from '@playwright/test'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { CURSOR_SCRIPT, DemoChatGPT, demoExtension, Pointer, Screencast, sleep, WORK } from './harness'
 import { DEMO_LOCALE, DEMO_TZ, STORY } from './fixtures/conversations'
@@ -65,6 +65,12 @@ test('record promo storyboard', async () => {
     const cast = new Screencast(page, resolve(OUT, 'frames'), { width: VIEWPORT.width * DPR, height: VIEWPORT.height * DPR })
     const marks: Record<string, number> = {}
     const mark = (name: string) => (marks[name] = Date.now() / 1000)
+    // Voice-over pacing (npm run promo:voice): a scene lasts at least as long as its line, plus a breath.
+    const voice = (await readFile(resolve(WORK, 'voice/voice.json'), 'utf8').then(JSON.parse, () => null)) as { lines: Array<{ mark: string; offset: number; duration: number }> } | null
+    const settle = async (scene: string) => {
+      const line = voice?.lines.find((l) => l.mark === scene)
+      if (line) await sleep((marks[scene]! + line.offset + line.duration + 0.45) * 1000 - Date.now())
+    }
     await cast.start()
     await pointer.glide(758, 608, 200) // a first repaint, so the recording starts on a frame
     mark('start')
@@ -79,6 +85,7 @@ test('record promo storyboard', async () => {
     await expect(panel(page)).toBeVisible()
     await expect(panel(page).locator('.count')).toHaveText(total.toLocaleString('en-US'))
     await sleep(900)
+    await settle('start')
 
     // Scene 2, live search: type into the real search box; the list narrows to matching titles.
     mark('search')
@@ -96,6 +103,7 @@ test('record promo storyboard', async () => {
     await expect(row(page, STORY.searchPick)).toHaveAttribute('aria-current', 'page')
     mark('search:opened')
     await sleep(1100)
+    await settle('search')
 
     // Scene 3, category chips: each one narrows the same list by topic.
     mark('category')
@@ -109,6 +117,7 @@ test('record promo storyboard', async () => {
       mark(`category:${label}`)
       await sleep(1700)
     }
+    await settle('category')
 
     // Scene 4, dates: back to everything, open the date groups, jump to an older chat.
     mark('dates')
@@ -131,6 +140,7 @@ test('record promo storyboard', async () => {
     await expect(row(page, STORY.datePick)).toHaveAttribute('aria-current', 'page')
     mark('dates:opened')
     await sleep(900)
+    await settle('dates')
 
     // Scene 5, related: chats about the same PR, surfaced locally from titles.
     mark('related')
@@ -145,6 +155,7 @@ test('record promo storyboard', async () => {
     await expect(chatTitle(page)).toHaveText(STORY.relatedPick)
     mark('related:opened')
     await sleep(1600)
+    await settle('related')
     mark('end')
     await cast.stop()
 

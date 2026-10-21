@@ -9,8 +9,10 @@
 import { chromium } from '@playwright/test'
 import ffmpegStatic from 'ffmpeg-static'
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { renderMusic } from './music.mjs'
 
 const ROOT = resolve(import.meta.dirname, '../..')
 const REC = resolve(ROOT, '.promo/recording')
@@ -67,6 +69,12 @@ const TALL_CAPTIONS = [
 ]
 
 const END_SECONDS = 3.6
+
+/** Voice-over for the 16:9 cut (npm run promo:voice), if generated. */
+const VOICE = resolve(ROOT, '.promo/voice/voice.json')
+const voice = existsSync(VOICE) ? JSON.parse(await readFile(VOICE, 'utf8')) : null
+/** A music file of your own (with the rights to use it) replaces the generated bed. */
+const MUSIC = process.env.PROMO_MUSIC ? resolve(process.env.PROMO_MUSIC) : null
 const XFADE = 0.6
 
 // ---------------------------------------------------------------------------
@@ -262,14 +270,16 @@ function captionChain(label, captions, first, x, y) {
 
 const ENCODE = ['-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-r', `${FPS}`,
   '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
-  '-c:a', 'aac', '-b:a', '96k', '-shortest', '-movflags', '+faststart']
+  '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-shortest', '-movflags', '+faststart']
 const TO_YUV = `scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,setsar=1`
 
-async function renderVideo({ name, size, frameList: list, length, place, frame, captions, capPos, endCard }) {
+async function renderVideo({ name, size, frameList: list, length, place, frame, captions, capPos, endCard, endSeconds = END_SECONDS, audio = null }) {
   const inputs = ['-f', 'concat', '-safe', '0', '-i', list, '-loop', '1', '-framerate', `${FPS}`, '-t', `${length}`, '-i', frame]
   for (const c of captions) inputs.push('-loop', '1', '-framerate', `${FPS}`, '-t', `${(c.to - c.from).toFixed(3)}`, '-i', c.png)
-  inputs.push('-loop', '1', '-framerate', `${FPS}`, '-t', `${END_SECONDS + XFADE}`, '-i', endCard)
-  inputs.push('-f', 'lavfi', '-t', `${length + END_SECONDS}`, '-i', 'anullsrc=r=48000:cl=stereo')
+  inputs.push('-loop', '1', '-framerate', `${FPS}`, '-t', `${endSeconds + XFADE}`, '-i', endCard)
+  // Some platforms reject video with no audio stream, so a cut without sound gets a silent track.
+  if (audio) inputs.push('-i', audio)
+  else inputs.push('-f', 'lavfi', '-t', `${length + endSeconds}`, '-i', 'anullsrc=r=48000:cl=stereo')
   const endIdx = 2 + captions.length
   const graph = [
     `color=c=0x0a0c16:s=${size.w}x${size.h}:r=${FPS}:d=${length},format=rgba[base]`,
@@ -285,6 +295,65 @@ async function renderVideo({ name, size, frameList: list, length, place, frame, 
   const out = resolve(OUT, name)
   await run([...inputs, '-filter_complex', graph.join(';'), '-map', '[out]', '-map', `${endIdx + 1}:a`, ...ENCODE, out])
   return out
+}
+
+/** Runs ffmpeg and returns its stderr (for loudnorm's measurements). */
+function capture(args) {
+  return new Promise((ok, fail) => {
+    const p = spawn(FFMPEG, ['-hide_banner', '-nostats', ...args])
+    let err = ''
+    p.stderr.on('data', (d) => (err += d))
+    p.on('error', fail)
+    p.on('close', (code) => (code === 0 ? ok(err) : fail(new Error(`ffmpeg exited ${code}\n${err}`))))
+  })
+}
+
+/**
+ * The 16:9 soundtrack: voice lines placed at their marks, music ducked under
+ * them, then two-pass EBU R128 normalisation to -14 LUFS / -1.5 dBTP (what
+ * YouTube plays back at), so it is neither quieter nor louder than its neighbours.
+ */
+async function soundtrack(total, endAt) {
+  let music = MUSIC
+  if (!music) {
+    music = resolve(TMP, 'music.wav')
+    const m = await renderMusic({ path: music, length: total, endAt })
+    console.log(`music: generated, ${m.bars} bars at ${m.bpm} BPM`)
+  } else console.log(`music: ${music}`)
+  const lines = voice?.lines ?? []
+  const inputs = ['-i', music, ...lines.flatMap((l) => ['-i', l.file])]
+  const graph = [`[0:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=0:${total},afade=t=in:d=1,afade=t=out:st=${(total - 2).toFixed(3)}:d=2,volume=0.30[mus]`]
+  if (lines.length) {
+    lines.forEach((l, i) => {
+      const ms = Math.round((marks[l.mark] + l.offset) * 1000)
+      graph.push(`[${i + 1}:a]aresample=48000,aformat=channel_layouts=mono,pan=stereo|c0=c0|c1=c0,adelay=${ms}:all=1[v${i}]`)
+    })
+    graph.push(`${lines.map((_, i) => `[v${i}]`).join('')}amix=inputs=${lines.length}:normalize=0,asplit=2[vo][key]`)
+    // Duck the music ~8 dB while the voice speaks; recover over ~0.4 s.
+    graph.push(`[mus][key]sidechaincompress=threshold=0.02:ratio=6:attack=20:release=400[duck]`)
+    graph.push(`[duck][vo]amix=inputs=2:normalize=0,apad=whole_dur=${total},atrim=0:${total}[mix]`)
+  } else graph.push(`[mus]apad=whole_dur=${total},atrim=0:${total}[mix]`)
+  const raw = resolve(TMP, 'mix.wav')
+  await run([...inputs, '-filter_complex', graph.join(';'), '-map', '[mix]', '-c:a', 'pcm_s16le', raw])
+  const m = JSON.parse((await capture(['-i', raw, '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json', '-f', 'null', '-'])).match(/\{[^{}]*"input_i"[^{}]*\}/)[0])
+  const out = resolve(TMP, 'soundtrack.wav')
+  const ln = `loudnorm=I=-14:TP=-1.5:LRA=11:measured_I=${m.input_i}:measured_TP=${m.input_tp}:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}:offset=${m.target_offset}:linear=true`
+  await run(['-i', raw, '-af', `${ln},aresample=48000,aformat=sample_fmts=s16:channel_layouts=stereo`, '-c:a', 'pcm_s16le', out])
+  return out
+}
+
+/** Subtitles for YouTube, from the narration as spoken. */
+async function subtitles(path) {
+  const ts = (t) => {
+    const ms = Math.round(t * 1000)
+    const p = (n, w = 2) => String(n).padStart(w, '0')
+    return `${p(Math.floor(ms / 3_600_000))}:${p(Math.floor(ms / 60_000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`
+  }
+  const cues = voice.lines.map((l, i) => {
+    const at = marks[l.mark] + l.offset
+    return `${i + 1}\n${ts(at)} --> ${ts(at + l.duration)}\n${l.text}\n`
+  })
+  await writeFile(path, cues.join('\n'))
 }
 
 /** Duration, size, codec and frame rate, read back from the file. */
@@ -320,6 +389,16 @@ await renderPngs([
 console.log('overlays rendered')
 
 const wideLength = marks.end
+// The end card stays until the last line has been said, plus a beat.
+const endLine = voice?.lines.find((l) => l.mark === 'end')
+const wideEnd = Math.max(END_SECONDS, endLine ? endLine.offset + endLine.duration + 1.1 : 0)
+if (voice) {
+  // Lines are paced by the recording; one recorded before the voice changed can overrun its scene.
+  for (const l of voice.lines) {
+    const next = l.next ? marks[l.next] : wideLength + wideEnd
+    if (marks[l.mark] + l.offset + l.duration > next + 0.05) console.warn(`warning: the "${l.id}" line overruns its scene; run npm run promo:record again`)
+  }
+} else console.warn('no voice-over (.promo/voice/voice.json); run npm run promo:voice for one')
 const wide = await renderVideo({
   name: 'history-plus-demo.mp4',
   size: { w: WIDE.w, h: WIDE.h, recX: WIDE.content.x, recY: WIDE.content.y },
@@ -330,8 +409,14 @@ const wide = await renderVideo({
   captions: wideCaps,
   capPos: { x: WIDE.col.x, y: 300 },
   endCard: png('end-wide'),
+  endSeconds: wideEnd,
+  audio: await soundtrack(wideLength + wideEnd, wideLength),
 })
 console.log(wide, await probe(wide))
+if (voice) {
+  await subtitles(resolve(OUT, 'history-plus-demo.en.srt'))
+  console.log(resolve(OUT, 'history-plus-demo.en.srt'))
+}
 
 const c = TALL.crop
 const socialLength = SOCIAL.to - SOCIAL.from

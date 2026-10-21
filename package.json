@@ -23,9 +23,10 @@
     "icons": "node scripts/icons.mjs",
     "zip": "node scripts/package.mjs",
     "store-assets": "npm run build && STORE_ASSETS=1 playwright test store-assets",
+    "promo:voice": "node scripts/promo/voice.mjs",
     "promo:record": "npm run build && playwright test -c scripts/promo/playwright.config.ts",
     "promo:build": "node scripts/promo/build.mjs",
-    "promo": "npm run promo:record && npm run promo:build"
+    "promo": "npm run promo:voice && npm run promo:record && npm run promo:build"
   },
   "dependencies": {
     "react": "^19.3.0",

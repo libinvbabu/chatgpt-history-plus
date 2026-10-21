@@ -10,3 +10,4 @@ marketing/raw/
 # Promo video: intermediate recordings, and the rendered videos (regenerate with npm run promo)
 .promo/
 marketing/promo/*.mp4
+marketing/promo/*.srt

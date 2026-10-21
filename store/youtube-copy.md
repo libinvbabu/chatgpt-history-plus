@@ -20,7 +20,7 @@ Open source:
 https://github.com/libinvbabu/chatgpt-history-plus
 ```
 
-The demo uses synthetic conversations; no real chat history appears in it.
+The demo uses synthetic conversations; no real chat history appears in it. The music is original, generated for this video (no licence or credit needed). The voice is Kokoro, an open-weight (Apache-2.0) text-to-speech model; no credit is required, but you can add "Voice: Kokoro TTS" to the description if you'd like to be open that it is synthetic.
 
 Suggested tags: ChatGPT, Chrome extension, ChatGPT history, productivity, search.
 
@@ -34,8 +34,9 @@ Suggested tags: ChatGPT, Chrome extension, ChatGPT history, productivity, search
 1. Go to YouTube Studio → **Create** → **Upload videos**, and choose `marketing/promo/history-plus-demo.mp4`.
 2. Paste the title and description above.
 3. **Thumbnail** → *Upload file* → `store/youtube-thumbnail.png`. Custom thumbnails need a phone-verified channel.
-4. Audience: *No, it's not made for kids*.
-5. Visibility: **Public** (or Unlisted, if you only want it on the store listing). Publish, then copy the video URL.
+4. **Subtitles** (after upload, Studio → *Subtitles* → *Add* → *Upload file* → *With timing*): `marketing/promo/history-plus-demo.en.srt`.
+5. Audience: *No, it's not made for kids*.
+6. Visibility: **Public** (or Unlisted, if you only want it on the store listing). Publish, then copy the video URL.
 
 For a Short, upload `marketing/promo/history-plus-social.mp4`. Vertical videos under 60 s become Shorts automatically.
 
