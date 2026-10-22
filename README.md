@@ -20,6 +20,13 @@
   <a href="https://github.com/libinvbabu/chatgpt-history-plus/issues">Report an issue</a>
 </p>
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=V8MRSSKgsic">
+    <img src="store/youtube-thumbnail.png" width="720" alt="Watch the 37-second History+ demo on YouTube">
+  </a><br>
+  <sub>▶ <a href="https://www.youtube.com/watch?v=V8MRSSKgsic">Watch the 37-second demo</a> (sound on)</sub>
+</p>
+
 ![History+ open next to a ChatGPT conversation, showing chats grouped under Today, Yesterday and Last week](store/screenshot-1-timeline.png)
 
 ## Why
